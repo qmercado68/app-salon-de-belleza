@@ -1,0 +1,61 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+.filters {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.filterBtn {
+  padding: var(--space-2) var(--space-5);
+  border-radius: var(--radius-full);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--neutral-600);
+  background: var(--bg-card);
+  border: 1.5px solid var(--neutral-200);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.filterBtn:hover {
+  border-color: var(--accent-300);
+  color: var(--accent-600);
+}
+
+.active {
+  background: linear-gradient(135deg, var(--accent-500), var(--primary-500));
+  color: #ffffff;
+  border-color: transparent;
+  box-shadow: 0 4px 12px rgba(108, 99, 255, 0.25);
+}
+
+.active:hover {
+  color: #ffffff;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: var(--space-5);
+}
+
+.cardWrap {
+  animation: fadeInUp 0.5s ease forwards;
+  opacity: 0;
+}
+
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.empty {
+  text-align: center;
+  padding: var(--space-16);
+  color: var(--neutral-400);
+}

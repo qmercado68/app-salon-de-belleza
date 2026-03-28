@@ -1,0 +1,121 @@
+.card {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  background: var(--bg-card);
+  padding: var(--space-5) var(--space-6);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--neutral-100);
+  box-shadow: var(--shadow-sm);
+  transition: all var(--transition-base);
+  position: relative;
+  overflow: hidden;
+}
+
+.card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+}
+
+.card:hover {
+  box-shadow: var(--shadow-md);
+  transform: translateY(-2px);
+}
+
+.iconWrap {
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.purple {
+  background: var(--accent-50);
+  color: var(--accent-500);
+}
+
+.card:has(.purple)::before {
+  background: linear-gradient(90deg, var(--accent-400), var(--accent-600));
+}
+
+.pink {
+  background: var(--primary-50);
+  color: var(--primary-500);
+}
+
+.card:has(.pink)::before {
+  background: linear-gradient(90deg, var(--primary-400), var(--primary-600));
+}
+
+.green {
+  background: var(--success-50);
+  color: var(--success-500);
+}
+
+.card:has(.green)::before {
+  background: linear-gradient(90deg, #34d399, #059669);
+}
+
+.orange {
+  background: var(--warning-50);
+  color: var(--warning-500);
+}
+
+.card:has(.orange)::before {
+  background: linear-gradient(90deg, #fbbf24, #d97706);
+}
+
+.blue {
+  background: var(--info-50);
+  color: var(--info-500);
+}
+
+.card:has(.blue)::before {
+  background: linear-gradient(90deg, #60a5fa, #2563eb);
+}
+
+.content {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+
+.value {
+  font-size: var(--text-2xl);
+  font-weight: 800;
+  color: var(--neutral-900);
+  line-height: 1.2;
+}
+
+.label {
+  font-size: var(--text-xs);
+  color: var(--neutral-500);
+  font-weight: 500;
+  margin-top: 2px;
+}
+
+.trend {
+  font-size: var(--text-xs);
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+}
+
+.positive {
+  background: var(--success-50);
+  color: var(--success-600);
+}
+
+.negative {
+  background: var(--danger-50);
+  color: var(--danger-600);
+}

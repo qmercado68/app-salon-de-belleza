@@ -1,0 +1,217 @@
+.page {
+  display: flex;
+  min-height: 100vh;
+}
+
+.leftPanel {
+  flex: 1;
+  background: linear-gradient(135deg, #1a1d2e 0%, #2d1f3d 50%, #1a1d2e 100%);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  padding: var(--space-12);
+  position: relative;
+  overflow: hidden;
+}
+
+.leftPanel::before {
+  content: '';
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: radial-gradient(circle, rgba(108, 99, 255, 0.08) 0%, transparent 60%);
+  animation: float 15s ease-in-out infinite;
+}
+
+@keyframes float {
+  0%, 100% { transform: translate(0, 0); }
+  33% { transform: translate(30px, -20px); }
+  66% { transform: translate(-20px, 30px); }
+}
+
+.branding {
+  text-align: center;
+  position: relative;
+  z-index: 1;
+}
+
+.logoIcon {
+  width: 72px;
+  height: 72px;
+  border-radius: var(--radius-xl);
+  background: linear-gradient(135deg, var(--accent-500), var(--primary-500));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+  margin: 0 auto var(--space-6);
+  box-shadow: 0 8px 32px rgba(108, 99, 255, 0.4);
+}
+
+.brandName {
+  font-family: var(--font-display);
+  font-size: var(--text-4xl);
+  font-weight: 700;
+  color: #ffffff;
+  margin-bottom: var(--space-2);
+}
+
+.brandTagline {
+  font-size: var(--text-lg);
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.features {
+  margin-top: var(--space-12);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  position: relative;
+  z-index: 1;
+}
+
+.feature {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  color: rgba(255, 255, 255, 0.7);
+  font-size: var(--text-sm);
+}
+
+.feature svg {
+  color: var(--accent-400);
+}
+
+.rightPanel {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-8);
+  background: var(--bg-primary);
+}
+
+.formCard {
+  width: 100%;
+  max-width: 420px;
+  background: var(--bg-card);
+  border-radius: var(--radius-xl);
+  padding: var(--space-10);
+  box-shadow: var(--shadow-xl);
+  border: 1px solid var(--neutral-100);
+}
+
+.formHeader {
+  margin-bottom: var(--space-8);
+}
+
+.formTitle {
+  font-family: var(--font-display);
+  font-size: var(--text-3xl);
+  font-weight: 700;
+  color: var(--neutral-900);
+  margin-bottom: var(--space-2);
+}
+
+.formSubtitle {
+  font-size: var(--text-sm);
+  color: var(--neutral-500);
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.note {
+  font-size: var(--text-xs);
+  color: var(--neutral-400);
+  text-align: center;
+}
+
+.sentMessage {
+  text-align: center;
+  padding: var(--space-6);
+  animation: fadeIn 0.4s ease;
+}
+
+.sentIcon {
+  font-size: 3rem;
+  margin-bottom: var(--space-4);
+}
+
+.sentMessage h3 {
+  font-size: var(--text-xl);
+  color: var(--success-600);
+  margin-bottom: var(--space-2);
+}
+
+.sentMessage p {
+  font-size: var(--text-sm);
+  color: var(--neutral-600);
+}
+
+.redirecting {
+  margin-top: var(--space-4);
+  font-size: var(--text-xs) !important;
+  color: var(--neutral-400) !important;
+  animation: pulse 1.5s ease infinite;
+}
+
+.demo {
+  margin-top: var(--space-6);
+  text-align: center;
+  padding-top: var(--space-6);
+  border-top: 1px solid var(--neutral-100);
+}
+
+.demoBtn {
+  font-size: var(--text-sm);
+  color: var(--accent-500);
+  font-weight: 600;
+  cursor: pointer;
+  transition: color var(--transition-fast);
+  background: none;
+  border: none;
+}
+
+.demoBtn:hover {
+  color: var(--accent-600);
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+@media (max-width: 768px) {
+  .page {
+    flex-direction: column;
+  }
+
+  .leftPanel {
+    padding: var(--space-8) var(--space-6);
+    min-height: auto;
+  }
+
+  .brandName {
+    font-size: var(--text-2xl);
+  }
+
+  .features {
+    display: none;
+  }
+
+  .formCard {
+    padding: var(--space-6);
+  }
+}

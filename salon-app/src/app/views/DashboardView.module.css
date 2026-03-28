@@ -1,0 +1,253 @@
+.dashboard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+/* Stats Grid */
+.statsGrid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--space-5);
+}
+
+@media (max-width: 1200px) {
+  .statsGrid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 640px) {
+  .statsGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Content Grid */
+.contentGrid {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr;
+  gap: var(--space-6);
+}
+
+@media (max-width: 1024px) {
+  .contentGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Card Headers */
+.cardHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: var(--space-5);
+}
+
+.cardTitle {
+  font-size: var(--text-lg);
+  font-weight: 700;
+  color: var(--neutral-900);
+}
+
+.cardSubtitle {
+  font-size: var(--text-xs);
+  color: var(--neutral-500);
+  margin-top: 2px;
+}
+
+/* Appointments List */
+.appointmentsCard {
+  padding: var(--space-6);
+}
+
+.appointmentsList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.filterBar {
+  display: flex;
+  gap: var(--space-2);
+  padding: 0 var(--space-6) var(--space-4);
+  border-bottom: 1px solid var(--neutral-100);
+  margin-bottom: var(--space-4);
+  overflow-x: auto;
+}
+
+.filterChip {
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-full);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  background: var(--neutral-100);
+  color: var(--neutral-600);
+  border: none;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all var(--transition-fast);
+}
+
+.filterChip:hover {
+  background: var(--neutral-200);
+}
+
+.filterChip.activeFilter {
+  background: var(--accent-500);
+  color: white;
+}
+
+.aptItem {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  transition: background var(--transition-fast);
+  animation: slideInUp 0.4s ease forwards;
+  opacity: 0;
+}
+
+.aptItem:hover {
+  background: var(--neutral-50);
+}
+
+@keyframes slideInUp {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.aptInfo {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.aptClient {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--neutral-800);
+}
+
+.aptService {
+  font-size: var(--text-xs);
+  color: var(--neutral-500);
+}
+
+.aptMeta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  margin-right: var(--space-2);
+}
+
+.aptTime {
+  font-size: var(--text-sm);
+  font-weight: 700;
+  color: var(--neutral-700);
+}
+
+.aptDate {
+  font-size: var(--text-xs);
+  color: var(--neutral-400);
+}
+
+/* Services List */
+.servicesCard {
+  padding: var(--space-6);
+}
+
+.servicesList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.srvItem {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  animation: slideInUp 0.4s ease forwards;
+  opacity: 0;
+}
+
+.srvRank {
+  font-size: var(--text-xs);
+  font-weight: 800;
+  color: var(--accent-500);
+  width: 28px;
+  text-align: center;
+}
+
+.srvInfo {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.srvName {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--neutral-800);
+}
+
+.srvCategory {
+  font-size: var(--text-xs);
+  color: var(--neutral-400);
+}
+
+.srvPrice {
+  font-size: var(--text-sm);
+  font-weight: 700;
+  color: var(--neutral-700);
+  min-width: 60px;
+  text-align: right;
+}
+
+.srvBar {
+  width: 80px;
+  height: 6px;
+  background: var(--neutral-100);
+  border-radius: var(--radius-full);
+  overflow: hidden;
+}
+
+.srvBarFill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent-400), var(--primary-400));
+  border-radius: var(--radius-full);
+  transition: width 1s ease;
+}
+
+/* Quick Stats */
+.quickStats {
+  display: flex;
+  gap: var(--space-4);
+  margin-top: var(--space-6);
+  padding-top: var(--space-5);
+  border-top: 1px solid var(--neutral-100);
+}
+
+.quickStat {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  align-items: center;
+  text-align: center;
+  color: var(--neutral-400);
+}
+
+.quickLabel {
+  font-size: var(--text-xs);
+  color: var(--neutral-500);
+}
+
+.quickValue {
+  font-size: var(--text-sm);
+  font-weight: 700;
+  color: var(--neutral-800);
+}
