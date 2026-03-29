@@ -8,6 +8,8 @@ import Avatar from '@/components/atoms/Avatar/Avatar';
 import { NavItemData } from '@/lib/types';
 import { CONFIG } from '@/lib/config';
 
+import { signout } from '@/app/auth/actions';
+
 interface SidebarProps {
   activeId: string;
   onNavigate: (id: string) => void;
@@ -40,6 +42,14 @@ export default function Sidebar({
   isOpen = true,
   onToggle,
 }: SidebarProps) {
+  const handleSignOut = async () => {
+    try {
+      await signout();
+    } catch (error) {
+      console.error('Error signing out:', error);
+    }
+  };
+
   return (
     <>
       {isOpen && <div className={styles.overlay} onClick={onToggle} />}
@@ -101,7 +111,11 @@ export default function Sidebar({
               </span>
             </div>
           </div>
-          <button className={styles.logoutBtn} title="Cerrar sesión">
+          <button 
+            className={styles.logoutBtn} 
+            title="Cerrar sesión"
+            onClick={handleSignOut}
+          >
             <LogOut size={18} />
           </button>
         </div>

@@ -1,12 +1,16 @@
-import { createClient } from '@supabase/supabase-js';
+import { createBrowserClient } from '@supabase/ssr';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-// standard Supabase client
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+// Only create the client if we have BOTH the URL and the Key
+export const supabase = (supabaseUrl && supabaseAnonKey && supabaseUrl !== 'undefined')
+  ? createBrowserClient(supabaseUrl, supabaseAnonKey)
+  : (null as any);
 
-// Fallback logic for demo purposes (if no env vars)
 export const isSupabaseConfigured = () => {
-  return supabaseUrl && supabaseAnonKey && supabaseUrl !== 'your-project-url';
+  return !!supabaseUrl && 
+         !!supabaseAnonKey && 
+         supabaseUrl !== 'your-project-url' &&
+         supabaseUrl !== 'undefined';
 };

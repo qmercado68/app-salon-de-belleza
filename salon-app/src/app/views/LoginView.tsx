@@ -6,6 +6,7 @@ import Button from '@/components/atoms/Button/Button';
 import Input from '@/components/atoms/Input/Input';
 import styles from './LoginView.module.css';
 import { CONFIG } from '@/lib/config';
+import { signInWithMagicLink } from '@/app/auth/actions';
 
 interface LoginViewProps {
   onLogin: () => void;
@@ -14,12 +15,24 @@ interface LoginViewProps {
 export default function LoginView({ onLogin }: LoginViewProps) {
   const [email, setEmail] = useState('');
   const [sent, setSent] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (email) {
-      setSent(true);
-      setTimeout(() => onLogin(), 1500);
+      setLoading(true);
+      setError(null);
+      try {
+        const formData = new FormData();
+        formData.append('email', email);
+        await signInWithMagicLink(formData);
+        setSent(true);
+      } catch (err: any) {
+        setError(err.message || 'Ocurrió un error al enviar el enlace');
+      } finally {
+        setLoading(false);
+      }
     }
   };
 
@@ -70,14 +83,16 @@ export default function LoginView({ onLogin }: LoginViewProps) {
                 onChange={(e) => setEmail(e.target.value)}
                 icon={<Mail size={18} />}
               />
+              {error && <p className={styles.errorMessage}>{error}</p>}
               <Button
                 type="submit"
                 variant="primary"
                 size="lg"
                 fullWidth
+                isLoading={loading}
                 icon={<ArrowRight size={18} />}
               >
-                Enviar Magic Link
+                {loading ? 'Enviando...' : 'Enviar Magic Link'}
               </Button>
               <p className={styles.note}>
                 No necesitas contraseña. Te enviaremos un enlace seguro a tu email.

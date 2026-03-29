@@ -12,7 +12,9 @@ import ReportsView from './views/ReportsView';
 import SalesView from './views/SalesView';
 import InventoryView from './views/InventoryView';
 import LoginView from './views/LoginView';
-import { mockAdminUser } from '@/lib/mockData';
+import { supabase } from '@/lib/supabase';
+import { api } from '@/lib/api';
+import { Profile } from '@/lib/types';
 
 type ViewId = 'login' | 'dashboard' | 'services' | 'appointments' | 'book' | 'profile' | 'admin' | 'reports' | 'sales' | 'inventory';
 
@@ -31,12 +33,70 @@ const pageTitles: Record<ViewId, { title: string; subtitle?: string }> = {
 
 export default function HomePage() {
   const [currentView, setCurrentView] = useState<ViewId>('login');
-  const currentUser = mockAdminUser;
+  const [user, setUser] = useState<any>(null);
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  if (currentView === 'login') {
+  React.useEffect(() => {
+    const checkUser = async () => {
+      try {
+        const { data: { user: authUser } } = await supabase.auth.getUser();
+        setUser(authUser);
+        
+        if (authUser) {
+          try {
+            const userProfile = await api.getProfile(authUser.id);
+            setProfile(userProfile);
+            setCurrentView('dashboard');
+          } catch (error) {
+            console.warn("Profile not synchronized yet, fallback to default.");
+            setCurrentView('dashboard');
+          }
+        }
+      } catch (err) {
+        console.error("Auth check failed:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    checkUser();
+
+    const { data: { subscription } } = supabase?.auth ? supabase.auth.onAuthStateChange(async (_event: any, session: any) => {
+      const authUser = session?.user ?? null;
+      setUser(authUser);
+      
+      if (authUser) {
+        setLoading(true);
+        try {
+          const userProfile = await api.getProfile(authUser.id);
+          setProfile(userProfile);
+          setCurrentView('dashboard');
+        } catch (error) {
+          console.warn("Profile fetch failed on state change:", error);
+          setCurrentView('dashboard');
+        } finally {
+          setLoading(false);
+        }
+      } else {
+        setCurrentView('login');
+        setLoading(false);
+      }
+    }) : { data: { subscription: { unsubscribe: () => {} } } };
+  }, []);
+
+  if (loading) {
+    return <div className="flex items-center justify-center min-h-screen">Cargando...</div>;
+  }
+
+  if (currentView === 'login' || !user) {
     return (
       <LoginView
-        onLogin={() => setCurrentView('dashboard')}
+        onLogin={() => {
+          setUser({ id: 'demo-user', email: 'demo@salon.com' });
+          setProfile({ fullName: 'Usuario Demo', role: 'admin' } as Profile);
+          setCurrentView('dashboard');
+        }}
       />
     );
   }
@@ -74,8 +134,8 @@ export default function HomePage() {
       onNavigate={(id) => setCurrentView(id as ViewId)}
       pageTitle={pageInfo.title}
       pageSubtitle={pageInfo.subtitle}
-      userName={currentUser.fullName}
-      userRole={currentUser.role}
+      userName={profile?.fullName || user.email || 'Usuario'}
+      userRole={profile?.role || 'client'}
     >
       {renderView()}
     </DashboardLayout>
