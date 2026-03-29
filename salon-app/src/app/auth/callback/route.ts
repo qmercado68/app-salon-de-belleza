@@ -5,6 +5,7 @@ import { createClient } from '@/utils/supabase/server'
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url)
   const code = searchParams.get('code')
+  const salonId = searchParams.get('salon_id')
   // if "next" is in search params, use it as the redirection URL
   const next = searchParams.get('next') ?? '/'
 
@@ -12,6 +13,26 @@ export async function GET(request: NextRequest) {
     const supabase = await createClient()
     const { error } = await supabase.auth.exchangeCodeForSession(code)
     if (!error) {
+      // If the magic link carried a salon_id, associate the client with that salon.
+      // Only update if the profile does not already have a salon_id (idempotent).
+      if (salonId) {
+        const { data: { user } } = await supabase.auth.getUser()
+        if (user) {
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('salon_id')
+            .eq('id', user.id)
+            .single()
+
+          if (!profile?.salon_id) {
+            await supabase
+              .from('profiles')
+              .update({ salon_id: salonId })
+              .eq('id', user.id)
+          }
+        }
+      }
+
       const forwardedHost = request.headers.get('x-forwarded-host') // if available, use it to ensure the correct domain
       const isLocalEnv = process.env.NODE_ENV === 'development'
       if (isLocalEnv) {

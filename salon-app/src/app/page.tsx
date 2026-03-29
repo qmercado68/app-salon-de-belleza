@@ -62,12 +62,14 @@ export default function HomePage() {
 
     checkUser();
 
-    const { data: { subscription } } = supabase?.auth ? supabase.auth.onAuthStateChange(async (_event: any, session: any) => {
+    const { data: { subscription } } = supabase?.auth ? supabase.auth.onAuthStateChange(async (event: any, session: any) => {
+      // No mostrar loading en refresco de token o al volver a la pestaña
+      if (event === 'TOKEN_REFRESHED' || event === 'INITIAL_SESSION') return;
+
       const authUser = session?.user ?? null;
       setUser(authUser);
-      
+
       if (authUser) {
-        setLoading(true);
         try {
           const userProfile = await api.getProfile(authUser.id);
           setProfile(userProfile);
@@ -75,12 +77,10 @@ export default function HomePage() {
         } catch (error) {
           console.warn("Profile fetch failed on state change:", error);
           setCurrentView('dashboard');
-        } finally {
-          setLoading(false);
         }
       } else {
+        setProfile(null);
         setCurrentView('login');
-        setLoading(false);
       }
     }) : { data: { subscription: { unsubscribe: () => {} } } };
   }, []);
@@ -103,20 +103,23 @@ export default function HomePage() {
 
   const pageInfo = pageTitles[currentView];
 
+  const userId = user?.id as string | undefined;
+  const userRole = profile?.role;
+
   const renderView = () => {
     switch (currentView) {
       case 'dashboard':
-        return <DashboardView onNavigate={setCurrentView} />;
+        return <DashboardView onNavigate={setCurrentView} userId={userId} />;
       case 'services':
-        return <ServicesView onBook={() => setCurrentView('book')} />;
+        return <ServicesView onBook={() => setCurrentView('book')} userId={userId} />;
       case 'appointments':
-        return <AppointmentsView />;
+        return <AppointmentsView userId={userId} role={userRole} />;
       case 'book':
-        return <BookView onSuccess={() => setCurrentView('appointments')} />;
+        return <BookView onSuccess={() => setCurrentView('appointments')} userId={userId} />;
       case 'profile':
-        return <ProfileView />;
+        return <ProfileView userId={userId ?? ''} userEmail={user?.email ?? undefined} initialProfile={profile ?? undefined} />;
       case 'admin':
-        return <AdminView />;
+        return <AdminView userId={userId} />;
       case 'reports':
         return <ReportsView />;
       case 'sales':
@@ -124,7 +127,7 @@ export default function HomePage() {
       case 'inventory':
         return <InventoryView />;
       default:
-        return <DashboardView onNavigate={setCurrentView} />;
+        return <DashboardView onNavigate={setCurrentView} userId={userId} />;
     }
   };
 
