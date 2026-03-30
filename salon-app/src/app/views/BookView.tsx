@@ -1,16 +1,18 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ChevronLeft, ChevronRight, Check } from 'lucide-react';
 import styles from './BookView.module.css';
 import Card from '@/components/atoms/Card/Card';
 import Button from '@/components/atoms/Button/Button';
 import Avatar from '@/components/atoms/Avatar/Avatar';
-import { mockServices, mockStylists, generateTimeSlots } from '@/lib/mockData';
+import { generateTimeSlots } from '@/lib/mockData';
+import { api } from '@/lib/api';
 import { Service, Stylist } from '@/lib/types';
 
 interface BookViewProps {
   onSuccess: () => void;
+  userId?: string;
 }
 
 type Step = 'service' | 'stylist' | 'datetime' | 'confirm';
@@ -20,18 +22,40 @@ const categoryIcons: Record<string, string> = {
   'Cuerpo': '✨', 'Maquillaje': '💄',
 };
 
-export default function BookView({ onSuccess }: BookViewProps) {
+// Placeholder stylist list (stylists table not yet implemented)
+const PLACEHOLDER_STYLISTS: Stylist[] = [
+  { id: 'sty-1', name: 'Profesional disponible', specialty: 'Todos los servicios', description: 'Se asignará al confirmar la cita.' },
+];
+
+export default function BookView({ onSuccess, userId }: BookViewProps) {
   const [step, setStep] = useState<Step>('service');
   const [selectedService, setSelectedService] = useState<Service | null>(null);
   const [selectedStylist, setSelectedStylist] = useState<Stylist | null>(null);
-  const [selectedDate, setSelectedDate] = useState('2026-03-28');
+  const [selectedDate, setSelectedDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [selectedTime, setSelectedTime] = useState('');
   const [isBooked, setIsBooked] = useState(false);
+  const [services, setServices] = useState<Service[]>([]);
+  const [loadingServices, setLoadingServices] = useState(true);
+
+  useEffect(() => {
+    const fetchServices = async () => {
+      try {
+        setLoadingServices(true);
+        const data = await api.getServices(userId);
+        setServices(data);
+      } catch (err) {
+        console.error('Error al cargar servicios:', err);
+      } finally {
+        setLoadingServices(false);
+      }
+    };
+    fetchServices();
+  }, [userId]);
 
   const timeSlots = generateTimeSlots(selectedDate);
 
-  // Generate calendar days
-  const today = new Date(2026, 2, 26); // March 26, 2026
+  // Generate calendar days (next 14 days from today)
+  const today = new Date();
   const calendarDays: Date[] = [];
   for (let i = 0; i < 14; i++) {
     const d = new Date(today);
@@ -39,9 +63,28 @@ export default function BookView({ onSuccess }: BookViewProps) {
     calendarDays.push(d);
   }
 
-  const handleConfirm = () => {
-    setIsBooked(true);
-    setTimeout(() => onSuccess(), 2000);
+  const handleConfirm = async () => {
+    if (!selectedService) return;
+    try {
+      await api.createAppointment(
+        {
+          clientId: userId,
+          serviceId: selectedService.id,
+          serviceName: selectedService.name,
+          stylistId: selectedStylist?.id,
+          stylistName: selectedStylist?.name,
+          appointmentDate: `${selectedDate}T${selectedTime}:00`,
+          status: 'pendiente',
+          isPaid: false,
+          paymentMethod: 'efectivo',
+        },
+        userId
+      );
+      setIsBooked(true);
+      setTimeout(() => onSuccess(), 2000);
+    } catch (err) {
+      console.error('Error al crear cita:', err);
+    }
   };
 
   if (isBooked) {
@@ -83,19 +126,23 @@ export default function BookView({ onSuccess }: BookViewProps) {
       {step === 'service' && (
         <div className={styles.section}>
           <h3 className={styles.sectionTitle}>¿Qué servicio deseas?</h3>
-          <div className={styles.serviceGrid}>
-            {mockServices.map((srv) => (
-              <div
-                key={srv.id}
-                className={`${styles.serviceOption} ${selectedService?.id === srv.id ? styles.selected : ''}`}
-                onClick={() => setSelectedService(srv)}
-              >
-                <span className={styles.serviceEmoji}>{categoryIcons[srv.category] || '✂️'}</span>
-                <span className={styles.serviceName}>{srv.name}</span>
-                <span className={styles.serviceMeta}>{srv.durationMinutes}min · ${srv.price.toLocaleString()}</span>
-              </div>
-            ))}
-          </div>
+          {loadingServices ? (
+            <p>Cargando...</p>
+          ) : (
+            <div className={styles.serviceGrid}>
+              {services.map((srv) => (
+                <div
+                  key={srv.id}
+                  className={`${styles.serviceOption} ${selectedService?.id === srv.id ? styles.selected : ''}`}
+                  onClick={() => setSelectedService(srv)}
+                >
+                  <span className={styles.serviceEmoji}>{categoryIcons[srv.category] || '✂️'}</span>
+                  <span className={styles.serviceName}>{srv.name}</span>
+                  <span className={styles.serviceMeta}>{srv.durationMinutes}min · ${srv.price.toLocaleString()}</span>
+                </div>
+              ))}
+            </div>
+          )}
           <div className={styles.navButtons}>
             <div />
             <Button
@@ -115,7 +162,7 @@ export default function BookView({ onSuccess }: BookViewProps) {
         <div className={styles.section}>
           <h3 className={styles.sectionTitle}>Selecciona un profesional</h3>
           <div className={styles.stylistGrid}>
-            {mockStylists.map((sty) => (
+            {PLACEHOLDER_STYLISTS.map((sty) => (
               <div
                 key={sty.id}
                 className={`${styles.stylistCard} ${selectedStylist?.id === sty.id ? styles.selected : ''}`}
@@ -146,7 +193,7 @@ export default function BookView({ onSuccess }: BookViewProps) {
         </div>
       )}
 
-      {/* Step 2: Select Date & Time */}
+      {/* Step 3: Select Date & Time */}
       {step === 'datetime' && (
         <div className={styles.section}>
           <h3 className={styles.sectionTitle}>Selecciona fecha y hora</h3>
@@ -200,7 +247,7 @@ export default function BookView({ onSuccess }: BookViewProps) {
         </div>
       )}
 
-      {/* Step 3: Confirm */}
+      {/* Step 4: Confirm */}
       {step === 'confirm' && selectedService && (
         <div className={styles.section}>
           <h3 className={styles.sectionTitle}>Confirma tu reserva</h3>

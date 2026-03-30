@@ -22,6 +22,7 @@ export interface Profile {
   role: UserRole;
   avatarUrl?: string;
   createdAt: string;
+  salonId?: string;
 }
 
 export interface Service {
@@ -32,6 +33,7 @@ export interface Service {
   price: number;
   category: string;
   imageUrl?: string;
+  salonId?: string;
 }
 
 export interface Stylist {
@@ -75,6 +77,7 @@ export interface Appointment {
   paymentMethod: PaymentMethod;
   isPaid: boolean;
   notes?: string;
+  salonId?: string;
 }
 
 export interface TimeSlot {

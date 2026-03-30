@@ -25,11 +25,17 @@ export async function login(formData: FormData) {
 export async function signInWithMagicLink(formData: FormData) {
   const supabase = await createClient();
   const email = formData.get('email') as string;
+  const salonId = formData.get('salon_id') as string | null;
+
+  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
+  const callbackUrl = salonId
+    ? `${baseUrl}/auth/callback?salon_id=${encodeURIComponent(salonId)}`
+    : `${baseUrl}/auth/callback`;
 
   const { error } = await supabase.auth.signInWithOtp({
     email,
     options: {
-      emailRedirectTo: `${process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'}/auth/callback`,
+      emailRedirectTo: callbackUrl,
     },
   });
 

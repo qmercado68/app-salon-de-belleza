@@ -1,20 +1,45 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import styles from './AppointmentsView.module.css';
 import Card from '@/components/atoms/Card/Card';
 import AppointmentRow from '@/components/molecules/AppointmentRow/AppointmentRow';
 import Button from '@/components/atoms/Button/Button';
-import { mockAppointments } from '@/lib/mockData';
-import { AppointmentStatus } from '@/lib/types';
+import { api } from '@/lib/api';
+import { Appointment, AppointmentStatus } from '@/lib/types';
 
 type FilterStatus = 'todas' | AppointmentStatus;
 
-export default function AppointmentsView() {
+interface AppointmentsViewProps {
+  userId?: string;
+  role?: string;
+}
+
+export default function AppointmentsView({ userId, role }: AppointmentsViewProps) {
   const [filterStatus, setFilterStatus] = useState<FilterStatus>('todas');
-  const [appointments, setAppointments] = useState(
-    mockAppointments.filter((a) => a.clientId === 'user-001' || true)
-  );
+  const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchAppointments = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        // Admin: todas las citas del salón; Cliente: solo sus propias citas
+        const data = role === 'admin'
+          ? await api.getAppointments(undefined, userId)
+          : await api.getAppointments(userId, userId);
+        setAppointments(data);
+      } catch (err) {
+        console.error('Error al cargar citas:', err);
+        setError('No se pudieron cargar las citas.');
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchAppointments();
+  }, [userId, role]);
 
   const filters: { label: string; value: FilterStatus }[] = [
     { label: 'Todas', value: 'todas' },
@@ -34,6 +59,14 @@ export default function AppointmentsView() {
       prev.map((a) => (a.id === id ? { ...a, status: 'cancelada' as AppointmentStatus } : a))
     );
   };
+
+  if (loading) {
+    return <div className={styles.page}><p>Cargando...</p></div>;
+  }
+
+  if (error) {
+    return <div className={styles.page}><p>{error}</p></div>;
+  }
 
   return (
     <div className={styles.page}>

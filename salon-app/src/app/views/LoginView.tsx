@@ -9,10 +9,12 @@ import { CONFIG } from '@/lib/config';
 import { signInWithMagicLink } from '@/app/auth/actions';
 
 interface LoginViewProps {
-  onLogin: () => void;
+  onLogin?: () => void;
+  salonId?: string;
+  salonName?: string;
 }
 
-export default function LoginView({ onLogin }: LoginViewProps) {
+export default function LoginView({ onLogin, salonId, salonName }: LoginViewProps) {
   const [email, setEmail] = useState('');
   const [sent, setSent] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -26,6 +28,9 @@ export default function LoginView({ onLogin }: LoginViewProps) {
       try {
         const formData = new FormData();
         formData.append('email', email);
+        if (salonId) {
+          formData.append('salon_id', salonId);
+        }
         await signInWithMagicLink(formData);
         setSent(true);
       } catch (err: any) {
@@ -67,7 +72,9 @@ export default function LoginView({ onLogin }: LoginViewProps) {
       <div className={styles.rightPanel}>
         <div className={styles.formCard}>
           <div className={styles.formHeader}>
-            <h2 className={styles.formTitle}>Bienvenida</h2>
+            <h2 className={styles.formTitle}>
+              {salonName ? `Bienvenida a ${salonName}` : 'Bienvenida'}
+            </h2>
             <p className={styles.formSubtitle}>
               Ingresa tu email para acceder con Magic Link
             </p>
@@ -107,11 +114,13 @@ export default function LoginView({ onLogin }: LoginViewProps) {
             </div>
           )}
 
-          <div className={styles.demo}>
-            <button className={styles.demoBtn} onClick={onLogin}>
-              Acceder con datos demo →
-            </button>
-          </div>
+          {onLogin && (
+            <div className={styles.demo}>
+              <button className={styles.demoBtn} onClick={onLogin}>
+                Acceder con datos demo →
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </div>
