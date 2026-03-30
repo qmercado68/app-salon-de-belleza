@@ -8,7 +8,6 @@ import Avatar from '@/components/atoms/Avatar/Avatar';
 import { NavItemData } from '@/lib/types';
 import { CONFIG } from '@/lib/config';
 
-import { signout } from '@/app/auth/actions';
 
 interface SidebarProps {
   activeId: string;
@@ -42,12 +41,13 @@ export default function Sidebar({
   isOpen = true,
   onToggle,
 }: SidebarProps) {
-  const handleSignOut = async () => {
+  const handleSignOut = () => {
     try {
-      await signout();
-    } catch (error) {
-      console.error('Error signing out:', error);
-    }
+      Object.keys(localStorage).forEach(key => {
+        if (key.startsWith('sb-')) localStorage.removeItem(key);
+      });
+    } catch (_) {}
+    window.location.href = '/';
   };
 
   return (

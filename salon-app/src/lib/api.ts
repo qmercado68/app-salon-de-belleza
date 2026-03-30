@@ -83,7 +83,7 @@ export const api = {
     if (profile.fullName !== undefined) payload.full_name = profile.fullName;
     if (profile.phone !== undefined) payload.phone = profile.phone;
     if (profile.address !== undefined) payload.address = profile.address;
-    if (profile.bloodType !== undefined) payload.blood_type = profile.bloodType;
+    if (profile.bloodType !== undefined) payload.blood_type = profile.bloodType || null;
     if (profile.medicalConditions !== undefined) payload.medical_conditions = profile.medicalConditions;
     if (profile.allergies !== undefined) payload.allergies = profile.allergies;
     if (profile.avatarUrl !== undefined) payload.avatar_url = profile.avatarUrl;
@@ -105,7 +105,7 @@ export const api = {
         : mockAppointments;
     }
 
-    let query = supabase.from('appointments').select('*, services(name), profiles(full_name)');
+    let query = supabase.from('appointments').select('*, services(name), profiles!client_id(full_name, allergies)');
 
     if (userId) {
       const salonId = await api.getSalonId(userId);
@@ -116,7 +116,20 @@ export const api = {
 
     const { data, error } = await query;
     if (error) throw error;
-    return data as unknown as Appointment[];
+    return (data as any[]).map((d) => ({
+      id: d.id,
+      clientId: d.client_id,
+      clientName: d.profiles?.full_name ?? '',
+      serviceId: d.service_id,
+      serviceName: d.services?.name ?? '',
+      appointmentDate: d.appointment_date,
+      status: d.status,
+      paymentMethod: d.payment_method,
+      isPaid: d.is_paid ?? false,
+      notes: d.notes ?? '',
+      salonId: d.salon_id,
+      allergies: d.profiles?.allergies ?? '',
+    })) as Appointment[];
   },
 
   async createAppointment(appointment: Partial<Appointment>, userId?: string): Promise<void> {
@@ -150,10 +163,9 @@ export const api = {
       throw new Error('Supabase no está configurado');
     }
 
-    const browserClient = createClient();
     const filePath = `${userId}/avatar.jpg`;
 
-    const { error } = await browserClient.storage
+    const { error } = await supabase.storage
       .from('avatars')
       .upload(filePath, file, {
         contentType: file.type,
@@ -162,7 +174,7 @@ export const api = {
 
     if (error) throw new Error(`Error al subir la foto: ${error.message}`);
 
-    return api.getAvatarUrl(userId);
+    return `${api.getAvatarUrl(userId)}?t=${Date.now()}`;
   },
 
   async updateAppointmentStatus(id: string, status: string, isPaid?: boolean): Promise<void> {

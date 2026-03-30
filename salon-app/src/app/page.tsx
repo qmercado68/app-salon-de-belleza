@@ -20,7 +20,7 @@ type ViewId = 'login' | 'dashboard' | 'services' | 'appointments' | 'book' | 'pr
 
 const pageTitles: Record<ViewId, { title: string; subtitle?: string }> = {
   login: { title: 'Iniciar Sesión' },
-  dashboard: { title: 'Buenos Días, Ana 👋', subtitle: 'Revisa la actividad de tu salón hoy' },
+  dashboard: { title: 'Dashboard', subtitle: 'Revisa la actividad de tu salón hoy' },
   services: { title: 'Catálogo de Servicios', subtitle: 'Explora todos nuestros tratamientos' },
   appointments: { title: 'Mis Citas', subtitle: 'Gestiona tus citas y revisa tu historial' },
   book: { title: 'Reservar Cita', subtitle: 'Selecciona un servicio, fecha y hora' },
