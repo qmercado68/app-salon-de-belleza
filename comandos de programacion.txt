@@ -1,0 +1,10 @@
+primero entrar a salon-app
+cd salon-app
+
+npm run dev - para correr el proyecto
+npm run start
+
+Maquila1968*  contraseña DB
+
+para bajar los cabios abro una terminal con control+ñ
+luego escribir: git pull origin dev
