@@ -1,22 +1,52 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import styles from './ServicesView.module.css';
 import ServiceCard from '@/components/molecules/ServiceCard/ServiceCard';
-import { mockServices } from '@/lib/mockData';
+import { api } from '@/lib/api';
+import { Service } from '@/lib/types';
 
 interface ServicesViewProps {
   onBook: () => void;
+  userId?: string;
 }
 
-export default function ServicesView({ onBook }: ServicesViewProps) {
+export default function ServicesView({ onBook, userId }: ServicesViewProps) {
   const [activeCategory, setActiveCategory] = useState('Todos');
+  const [services, setServices] = useState<Service[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const categories = ['Todos', ...Array.from(new Set(mockServices.map((s) => s.category)))];
+  useEffect(() => {
+    const fetchServices = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        const data = await api.getServices(userId);
+        setServices(data);
+      } catch (err) {
+        console.error('Error al cargar servicios:', err);
+        setError('No se pudieron cargar los servicios.');
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchServices();
+  }, [userId]);
+
+  const categories = ['Todos', ...Array.from(new Set(services.map((s) => s.category)))];
   const filteredServices =
     activeCategory === 'Todos'
-      ? mockServices
-      : mockServices.filter((s) => s.category === activeCategory);
+      ? services
+      : services.filter((s) => s.category === activeCategory);
+
+  if (loading) {
+    return <div className={styles.page}><p>Cargando...</p></div>;
+  }
+
+  if (error) {
+    return <div className={styles.page}><p>{error}</p></div>;
+  }
 
   return (
     <div className={styles.page}>

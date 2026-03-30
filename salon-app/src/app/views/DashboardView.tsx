@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { CalendarDays, Users, DollarSign, TrendingUp, Scissors, Clock } from 'lucide-react';
 import styles from './DashboardView.module.css';
 import StatCard from '@/components/atoms/StatCard/StatCard';
@@ -8,29 +8,65 @@ import Card from '@/components/atoms/Card/Card';
 import Badge from '@/components/atoms/Badge/Badge';
 import Avatar from '@/components/atoms/Avatar/Avatar';
 import Button from '@/components/atoms/Button/Button';
-import { mockDashboardStats, mockAppointments, mockServices, mockStylists } from '@/lib/mockData';
+import { api } from '@/lib/api';
+import { Appointment, Service, DashboardStats } from '@/lib/types';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 
 interface DashboardViewProps {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   onNavigate: (id: any) => void;
+  userId?: string;
 }
 
-export default function DashboardView({ onNavigate }: DashboardViewProps) {
-  const [selectedStylistId, setSelectedStylistId] = useState<string | null>(null);
-  
-  const stats = mockDashboardStats;
-  
-  const filteredAppointments = selectedStylistId 
-    ? mockAppointments.filter(a => a.stylistId === selectedStylistId)
-    : mockAppointments;
+export default function DashboardView({ onNavigate, userId }: DashboardViewProps) {
+  const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [services, setServices] = useState<Service[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const todayAppointments = filteredAppointments.filter(
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        setLoading(true);
+        const [appts, svcs] = await Promise.all([
+          api.getAppointments(undefined, userId),
+          api.getServices(userId),
+        ]);
+        setAppointments(appts);
+        setServices(svcs);
+      } catch (err) {
+        console.error('Error al cargar datos del dashboard:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchData();
+  }, [userId]);
+
+  // Calculate stats from real data
+  const today = new Date().toISOString().split('T')[0];
+  const stats: DashboardStats = {
+    todayAppointments: appointments.filter(
+      (a) => a.appointmentDate?.startsWith(today)
+    ).length,
+    pendingAppointments: appointments.filter((a) => a.status === 'pendiente').length,
+    completedAppointments: appointments.filter((a) => a.status === 'completada').length,
+    monthlyRevenue: appointments
+      .filter((a) => a.status === 'completada' && a.isPaid)
+      .reduce((sum) => sum, 0),
+    totalClients: new Set(appointments.map((a) => a.clientId)).size,
+    popularService: services[0]?.name || '—',
+  };
+
+  const todayAppointments = appointments.filter(
     (a) => a.status === 'pendiente' || a.status === 'confirmada'
   );
-  
-  const topServices = mockServices.slice(0, 4);
+
+  const topServices = services.slice(0, 4);
+
+  if (loading) {
+    return <div className={styles.dashboard}><p>Cargando...</p></div>;
+  }
 
   return (
     <div className={styles.dashboard}>
@@ -79,43 +115,29 @@ export default function DashboardView({ onNavigate }: DashboardViewProps) {
             </Button>
           </div>
 
-          <div className={styles.filterBar}>
-            <button 
-              className={`${styles.filterChip} ${selectedStylistId === null ? styles.activeFilter : ''}`}
-              onClick={() => setSelectedStylistId(null)}
-            >
-              Todos
-            </button>
-            {mockStylists.map(sty => (
-              <button 
-                key={sty.id}
-                className={`${styles.filterChip} ${selectedStylistId === sty.id ? styles.activeFilter : ''}`}
-                onClick={() => setSelectedStylistId(sty.id)}
-              >
-                {sty.name.split(' ')[0]}
-              </button>
-            ))}
-          </div>
-
           <div className={styles.appointmentsList}>
-            {todayAppointments.map((apt, i) => (
-              <div key={apt.id} className={styles.aptItem} style={{ animationDelay: `${i * 0.1}s` }}>
-                <Avatar name={apt.clientName} size="sm" />
-                <div className={styles.aptInfo}>
-                  <span className={styles.aptClient}>{apt.clientName}</span>
-                  <span className={styles.aptService}>{apt.serviceName}</span>
+            {todayAppointments.length === 0 ? (
+              <p className={styles.cardSubtitle}>No hay citas pendientes o confirmadas.</p>
+            ) : (
+              todayAppointments.map((apt, i) => (
+                <div key={apt.id} className={styles.aptItem} style={{ animationDelay: `${i * 0.1}s` }}>
+                  <Avatar name={apt.clientName} size="sm" />
+                  <div className={styles.aptInfo}>
+                    <span className={styles.aptClient}>{apt.clientName}</span>
+                    <span className={styles.aptService}>{apt.serviceName}</span>
+                  </div>
+                  <div className={styles.aptMeta}>
+                    <span className={styles.aptTime}>
+                      {format(new Date(apt.appointmentDate), "HH:mm")}
+                    </span>
+                    <span className={styles.aptDate}>
+                      {format(new Date(apt.appointmentDate), "d MMM", { locale: es })}
+                    </span>
+                  </div>
+                  <Badge variant={apt.status}>{apt.status}</Badge>
                 </div>
-                <div className={styles.aptMeta}>
-                  <span className={styles.aptTime}>
-                    {format(new Date(apt.appointmentDate), "HH:mm")}
-                  </span>
-                  <span className={styles.aptDate}>
-                    {format(new Date(apt.appointmentDate), "d MMM", { locale: es })}
-                  </span>
-                </div>
-                <Badge variant={apt.status}>{apt.status}</Badge>
-              </div>
-            ))}
+              ))
+            )}
           </div>
         </Card>
 
