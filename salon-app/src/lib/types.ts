@@ -57,16 +57,34 @@ export interface Product {
   stock: number;
   category: string;
   imageUrl?: string;
+  isActive?: boolean;
+  brand?: string;
+  unit?: string;
+  minStock?: number;
+  maxStock?: number;
+  supplierName?: string;
+  supplierPhone?: string;
+  lastArrival?: string;
+}
+
+export interface SaleItem {
+  productId?: string;
+  productName: string;
+  quantity: number;
+  unitPrice: number;
+  subtotal: number;
+  appointmentId?: string;
+  serviceId?: string;
 }
 
 export interface ProductSale {
   id: string;
-  productId: string;
-  productName: string;
-  quantity: number;
-  totalPrice: number;
-  saleDate: string;
+  clientId?: string;
+  sellerId: string;
+  totalAmount: number;
   paymentMethod: PaymentMethod;
+  saleDate: string;
+  items: SaleItem[];
 }
 
 export interface Appointment {
@@ -75,6 +93,7 @@ export interface Appointment {
   clientName: string;
   serviceId: string;
   serviceName: string;
+  servicePrice?: number;
   stylistId?: string;
   stylistName?: string;
   appointmentDate: string;
@@ -97,6 +116,18 @@ export interface DashboardStats {
   monthlyRevenue: number;
   totalClients: number;
   popularService: string;
+}
+
+export interface DailyReportSummary {
+  date: string;
+  totalSales: number;
+  cashTotal: number;
+  cardTotal: number;
+  servicesTotal: number;
+  productsTotal: number;
+  appointmentsCount: number;
+  productsCount: number;
+  topStylist?: { name: string; amount: number };
 }
 
 export interface NavItemData {

@@ -6,7 +6,8 @@ import {
   mockCurrentUser,
   mockClients
 } from './mockData';
-import { Service, Appointment, Profile } from './types';
+import { Service, Appointment, Profile, Product, ProductSale, SaleItem, DailyReportSummary } from './types';
+import { mockProducts, mockProductSales } from './mockData';
 
 // ==========================================
 // Generic API Wrapper with Mock Fallback
@@ -305,5 +306,315 @@ export const api = {
       .eq('id', id);
 
     if (error) throw error;
+  },
+
+  async getUnpaidAppointments(date: string): Promise<Appointment[]> {
+    if (!isSupabaseConfigured()) {
+      return mockAppointments.filter(a => 
+        a.appointmentDate.startsWith(date) && !a.isPaid && a.status !== 'cancelada'
+      );
+    }
+
+    const startOfDay = `${date}T00:00:00.000Z`;
+    const endOfDay = `${date}T23:59:59.999Z`;
+
+    const { data, error } = await supabase
+      .from('appointments')
+      .select('*, services(name, price), profiles!client_id(full_name), stylist:profiles!stylist_id(full_name)')
+      .eq('is_paid', false)
+      .neq('status', 'cancelada')
+      .gte('appointment_date', startOfDay)
+      .lte('appointment_date', endOfDay);
+
+    if (error) throw error;
+    return (data as any[]).map((d) => ({
+      id: d.id,
+      clientId: d.client_id,
+      clientName: d.profiles?.full_name ?? '',
+      serviceId: d.service_id,
+      serviceName: d.services?.name ?? '',
+      servicePrice: d.services?.price ?? 0,
+      stylistId: d.stylist_id,
+      stylistName: d.stylist?.full_name ?? 'Sin asignar', // Corrected join name
+      appointmentDate: d.appointment_date,
+      status: d.status,
+      paymentMethod: d.payment_method,
+      isPaid: d.is_paid ?? false,
+      notes: d.notes ?? '',
+      salonId: d.salon_id,
+    })) as Appointment[];
+  },
+
+  // PRODUCTS & INVENTORY
+  async getProducts(): Promise<Product[]> {
+    if (!isSupabaseConfigured()) return mockProducts;
+
+    const { data, error } = await supabase
+      .from('products')
+      .select('*')
+      .order('name');
+    
+    if (error) throw error;
+    return (data as any[]).map(d => ({
+      id: d.id,
+      name: d.name,
+      description: d.description,
+      price: d.price,
+      stock: d.stock,
+      category: d.category,
+      imageUrl: d.image_url,
+      isActive: d.is_active,
+      brand: d.brand,
+      unit: d.unit,
+      minStock: d.min_stock,
+      maxStock: d.max_stock,
+      supplierName: d.supplier_name,
+      supplierPhone: d.supplier_phone,
+      lastArrival: d.last_arrival,
+    })) as Product[];
+  },
+
+  async updateProductStock(id: string, newStock: number): Promise<void> {
+    if (!isSupabaseConfigured()) {
+      console.log(`Mock: Stock de producto ${id} actualizado a ${newStock}`);
+      return;
+    }
+
+    const { error } = await supabase
+      .from('products')
+      .update({ stock: newStock, updated_at: new Date().toISOString() })
+      .eq('id', id);
+    
+    if (error) throw error;
+  },
+
+  async createProduct(product: Partial<Product>): Promise<Product> {
+    if (!isSupabaseConfigured()) {
+      const newProd = {
+        ...product,
+        id: 'prod-' + Date.now(),
+        stock: product.stock ?? 0,
+      } as Product;
+      mockProducts.push(newProd);
+      return newProd;
+    }
+
+    const payload = {
+      name: product.name,
+      description: product.description,
+      price: product.price,
+      stock: product.stock ?? 0,
+      category: product.category,
+      image_url: product.imageUrl,
+      is_active: product.isActive ?? true,
+      brand: product.brand,
+      unit: product.unit,
+      min_stock: product.minStock,
+      max_stock: product.maxStock,
+      supplier_name: product.supplierName,
+      supplier_phone: product.supplierPhone,
+      last_arrival: product.lastArrival,
+    };
+
+    const { data, error } = await supabase.from('products').insert(payload).select().single();
+    if (error) throw error;
+    
+    return {
+      id: data.id,
+      name: data.name,
+      description: data.description,
+      price: data.price,
+      stock: data.stock,
+      category: data.category,
+      imageUrl: data.image_url,
+      isActive: data.is_active,
+    } as Product;
+  },
+
+  async updateProduct(id: string, product: Partial<Product>): Promise<void> {
+    if (!isSupabaseConfigured()) {
+      console.log('Mock: Producto actualizado', id, product);
+      return;
+    }
+
+    const payload: any = {};
+    if (product.name !== undefined) payload.name = product.name;
+    if (product.description !== undefined) payload.description = product.description;
+    if (product.price !== undefined) payload.price = product.price;
+    if (product.stock !== undefined) payload.stock = product.stock;
+    if (product.category !== undefined) payload.category = product.category;
+    if (product.imageUrl !== undefined) payload.image_url = product.imageUrl;
+    if (product.isActive !== undefined) payload.is_active = product.isActive;
+    if (product.brand !== undefined) payload.brand = product.brand;
+    if (product.unit !== undefined) payload.unit = product.unit;
+    if (product.minStock !== undefined) payload.min_stock = product.minStock;
+    if (product.maxStock !== undefined) payload.max_stock = product.maxStock;
+    if (product.supplierName !== undefined) payload.supplier_name = product.supplierName;
+    if (product.supplierPhone !== undefined) payload.supplier_phone = product.supplierPhone;
+    if (product.lastArrival !== undefined) payload.last_arrival = product.lastArrival;
+
+    const { error } = await supabase.from('products').update(payload).eq('id', id);
+    if (error) throw error;
+  },
+
+  // POS / SALES
+  async processSale(sale: Omit<ProductSale, 'id' | 'saleDate'>): Promise<string> {
+    if (!isSupabaseConfigured()) {
+      console.log('Mock: Venta procesada', sale);
+      return 'mock-sale-' + Date.now();
+    }
+
+    // Usar la función RPC 'process_sale' definida en el esquema SQL
+    const { data, error } = await supabase.rpc('process_sale', {
+      p_client_id: sale.clientId,
+      p_seller_id: sale.sellerId,
+      p_payment_method: sale.paymentMethod,
+      p_items: sale.items.map(item => ({
+        product_id: item.productId || null,
+        service_id: item.serviceId || null,
+        appointment_id: item.appointmentId || null,
+        quantity: item.quantity,
+        unit_price: item.unitPrice,
+        name: item.productName || 'Servicio'
+      }))
+    });
+
+    if (error) throw error;
+    return data as string;
+  },
+
+  async getDailyReport(date: string): Promise<DailyReportSummary> {
+    if (!isSupabaseConfigured()) {
+      // Mock daily report based on mock data
+      const sales = mockProductSales.filter(s => s.saleDate.startsWith(date));
+      const appts = mockAppointments.filter(a => a.appointmentDate.startsWith(date) && a.isPaid);
+      
+      const productsTotal = sales.reduce((sum, s) => sum + s.totalAmount, 0);
+      const servicesTotal = appts.reduce((sum, a) => sum + (mockServices.find(s => s.id === a.serviceId)?.price || 0), 0);
+      const cashTotal = [...sales, ...appts].filter(x => x.paymentMethod === 'efectivo')
+        .reduce((sum, x) => sum + ( (x as any).totalAmount || (mockServices.find(s => s.id === (x as any).serviceId)?.price || 0) ), 0);
+
+      return {
+        date,
+        totalSales: productsTotal + servicesTotal,
+        cashTotal,
+        cardTotal: (productsTotal + servicesTotal) - cashTotal,
+        servicesTotal,
+        productsTotal,
+        appointmentsCount: appts.length,
+        productsCount: sales.length,
+        topStylist: { name: 'Ana Rodríguez', amount: servicesTotal }
+      };
+    }
+
+    const startOfDay = `${date}T00:00:00.000Z`;
+    const endOfDay = `${date}T23:59:59.999Z`;
+
+    // 1. Fetch ALL transactions of the day...
+    const { data: sales, error: salesError } = await supabase
+      .from('product_sales')
+      .select('*, profiles!seller_id(full_name), sale_items(*, services(name, price), appointments(profiles!stylist_id(full_name)))') 
+      .gte('created_at', startOfDay)
+      .lte('created_at', endOfDay);
+
+    if (salesError) throw salesError;
+
+    // Aggregate from sales items for better precision
+    let cashTotal = 0;
+    let cardTotal = 0;
+    let servicesTotal = 0;
+    let productsTotal = 0;
+    let appointmentsCount = 0;
+    let productsCount = 0;
+    const stylistSales: Record<string, { name: string; amount: number }> = {};
+
+    sales.forEach((s: any) => {
+      if (s.payment_method === 'efectivo') cashTotal += s.total_amount;
+      else cardTotal += s.total_amount;
+
+      s.sale_items.forEach((si: any) => {
+        if (si.appointment_id) {
+          servicesTotal += si.unit_price * si.quantity;
+          appointmentsCount++;
+          
+          const name = si.appointments?.profiles?.full_name || 'Sin asignar';
+          if (!stylistSales[name]) stylistSales[name] = { name, amount: 0 };
+          stylistSales[name].amount += si.unit_price * si.quantity;
+        } else {
+          productsTotal += si.unit_price * si.quantity;
+          productsCount++;
+        }
+      });
+    });
+
+    const topStylist = Object.values(stylistSales).sort((a, b) => b.amount - a.amount)[0];
+
+    return {
+      date,
+      totalSales: cashTotal + cardTotal,
+      cashTotal,
+      cardTotal,
+      servicesTotal,
+      productsTotal,
+      appointmentsCount,
+      productsCount,
+      topStylist
+    };
+  },
+
+  async getDailyTransactions(date: string): Promise<any[]> {
+    if (!isSupabaseConfigured()) {
+      return [...mockProductSales.map((s: ProductSale) => ({
+        id: s.id,
+        type: 'Producto',
+        clientName: 'Venta Directa',
+        concept: s.items[0]?.productName || 'Venta',
+        date: s.saleDate,
+        paymentMethod: s.paymentMethod,
+        amount: s.totalAmount,
+        status: 'Pagado'
+      })), ...mockAppointments.filter(a => a.isPaid).map((a: Appointment) => ({
+        id: a.id,
+        type: 'Servicio',
+        clientName: a.clientName,
+        concept: a.serviceName,
+        date: a.appointmentDate,
+        paymentMethod: a.paymentMethod,
+        amount: 350, // Mock price
+        status: 'Pagado'
+      }))];
+    }
+
+    const startOfDay = `${date}T00:00:00.000Z`;
+    const endOfDay = `${date}T23:59:59.999Z`;
+
+    // Fetch transactions from the sales table (centralized truth)
+    const { data: sales, error } = await supabase
+      .from('product_sales')
+      .select('*, profiles!client_id(full_name), sale_items(*, services(name), appointments(profiles!stylist_id(full_name))))')
+      .gte('created_at', startOfDay)
+      .lte('created_at', endOfDay);
+
+    if (error) throw error;
+
+    const transactions: any[] = [];
+    
+    sales?.forEach((s: any) => {
+      s.sale_items.forEach((si: any) => {
+        const type = si.appointment_id ? 'Servicio' : 'Producto';
+        transactions.push({
+          id: s.id,
+          type,
+          clientName: s.profiles?.full_name || 'Venta Directa',
+          concept: si.appointment_id ? si.services?.name : (si.product_id ? 'Producto' : 'Venta'),
+          date: s.created_at,
+          paymentMethod: s.payment_method,
+          amount: si.unit_price * si.quantity,
+          status: 'Pagado'
+        });
+      });
+    });
+
+    return transactions.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   }
 };

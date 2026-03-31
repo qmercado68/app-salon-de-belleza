@@ -20,17 +20,18 @@ interface SidebarProps {
 
 const navItems: NavItemData[] = [
   { id: 'dashboard', label: 'Dashboard', icon: 'dashboard', href: '/dashboard' },
+  { id: 'pos', label: 'Punto de Venta', icon: 'sales', href: '/pos' },
   { id: 'services', label: 'Servicios', icon: 'services', href: '/services' },
   { id: 'appointments', label: 'Mis Citas', icon: 'appointments', href: '/appointments', badge: 3 },
   { id: 'book', label: 'Reservar', icon: 'history', href: '/appointments/book' },
-  { id: 'sales', label: 'Ventas', icon: 'sales', href: '/sales' },
-  { id: 'inventory', label: 'Inventario', icon: 'inventory', href: '/inventory' },
-  { id: 'reports', label: 'Reportes', icon: 'reports', href: '/reports' },
+  { id: 'sales', label: 'Historial Ventas', icon: 'sales', href: '/sales' },
   { id: 'profile', label: 'Mi Perfil', icon: 'profile', href: '/profile' },
 ];
 
 const adminItems: NavItemData[] = [
   { id: 'admin', label: 'Panel Admin', icon: 'admin', href: '/admin', badge: 2 },
+  { id: 'inventory', label: 'Bodega / Stock', icon: 'inventory', href: '/inventory' },
+  { id: 'reports', label: 'Reportes', icon: 'reports', href: '/reports' },
   { id: 'users', label: 'Usuarios', icon: 'profile', href: '/users' },
   { id: 'admin-services', label: 'Gestión Servicios', icon: 'services', href: '/admin-services' },
 ];

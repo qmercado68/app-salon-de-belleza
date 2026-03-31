@@ -15,21 +15,31 @@ export async function GET(request: NextRequest) {
     if (!error) {
       // If the magic link carried a salon_id, associate the client with that salon.
       // Only update if the profile does not already have a salon_id (idempotent).
-      if (salonId) {
-        const { data: { user } } = await supabase.auth.getUser()
-        if (user) {
-          const { data: profile } = await supabase
-            .from('profiles')
-            .select('salon_id')
-            .eq('id', user.id)
-            .single()
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) {
+        // Wait a small moment or perform a check to ensure the trigger...
+        const { data: profile, error: profileError } = await supabase
+          .from('profiles')
+          .select('id, salon_id')
+          .eq('id', user.id)
+          .single()
 
-          if (!profile?.salon_id) {
-            await supabase
-              .from('profiles')
-              .update({ salon_id: salonId })
-              .eq('id', user.id)
-          }
+        if (profileError && profileError.code === 'PGRST116') {
+          // If profile doesn't exist yet, we try to create it manually as a fallback 
+          // (though the trigger should handle it, this is for maximum robustness)
+          await supabase.from('profiles').insert({
+            id: user.id,
+            email: user.email,
+            full_name: user.user_metadata?.full_name || 'Nuevo Usuario',
+            role: 'client'
+          })
+        }
+
+        if (salonId && (!profile || !profile.salon_id)) {
+          await supabase
+            .from('profiles')
+            .update({ salon_id: salonId })
+            .eq('id', user.id)
         }
       }
 

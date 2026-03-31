@@ -320,6 +320,12 @@ export const mockProducts: Product[] = [
     price: 450,
     stock: 24,
     category: 'Cabello',
+    brand: 'Loreal',
+    unit: '500ml',
+    minStock: 10,
+    maxStock: 50,
+    supplierName: 'Distribuidora ProSalón',
+    supplierPhone: '555-1234',
   },
   {
     id: 'prod-002',
@@ -328,6 +334,12 @@ export const mockProducts: Product[] = [
     price: 420,
     stock: 18,
     category: 'Cabello',
+    brand: 'Loreal',
+    unit: '500ml',
+    minStock: 10,
+    maxStock: 50,
+    supplierName: 'Distribuidora ProSalón',
+    supplierPhone: '555-1234',
   },
   {
     id: 'prod-003',
@@ -336,6 +348,12 @@ export const mockProducts: Product[] = [
     price: 850,
     stock: 12,
     category: 'Cabello',
+    brand: 'Moroccanoil',
+    unit: '100ml',
+    minStock: 5,
+    maxStock: 20,
+    supplierName: 'Importaciones Beauty',
+    supplierPhone: '555-5678',
   },
   {
     id: 'prod-004',
@@ -344,6 +362,12 @@ export const mockProducts: Product[] = [
     price: 180,
     stock: 45,
     category: 'Uñas',
+    brand: 'OPI',
+    unit: '15ml',
+    minStock: 20,
+    maxStock: 100,
+    supplierName: 'Distribuidora Uñas Mágicas',
+    supplierPhone: '555-9012',
   },
   {
     id: 'prod-005',
@@ -352,27 +376,47 @@ export const mockProducts: Product[] = [
     price: 1200,
     stock: 8,
     category: 'Facial',
+    brand: 'Eucerin',
+    unit: '50ml',
+    minStock: 5,
+    maxStock: 15,
+    supplierName: 'Pharma Derm',
+    supplierPhone: '555-3456',
   },
 ];
 
 export const mockProductSales: ProductSale[] = [
   {
     id: 'psale-001',
-    productId: 'prod-001',
-    productName: 'Shampoo Reparación Intensa',
-    quantity: 2,
-    totalPrice: 900,
-    saleDate: '2026-03-27T10:30:00',
+    sellerId: 'admin-001',
+    totalAmount: 900,
     paymentMethod: 'efectivo',
+    saleDate: '2026-03-27T10:30:00',
+    items: [
+      {
+        productId: 'prod-001',
+        productName: 'Shampoo Reparación Intensa',
+        quantity: 2,
+        unitPrice: 450,
+        subtotal: 900,
+      }
+    ],
   },
   {
     id: 'psale-002',
-    productId: 'prod-003',
-    productName: 'Aceite de Argán Premium',
-    quantity: 1,
-    totalPrice: 850,
-    saleDate: '2026-03-27T11:45:00',
+    sellerId: 'admin-001',
+    totalAmount: 850,
     paymentMethod: 'tarjeta',
+    saleDate: '2026-03-27T11:45:00',
+    items: [
+      {
+        productId: 'prod-003',
+        productName: 'Aceite de Argán Premium',
+        quantity: 1,
+        unitPrice: 850,
+        subtotal: 850,
+      }
+    ],
   },
 ];
 

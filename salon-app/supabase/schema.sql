@@ -205,6 +205,8 @@ CREATE TABLE public.sale_items (
   id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
   sale_id uuid REFERENCES public.product_sales(id) ON DELETE CASCADE,
   product_id uuid REFERENCES public.products(id),
+  service_id uuid REFERENCES public.services(id),
+  appointment_id uuid REFERENCES public.appointments(id),
   quantity integer NOT NULL CHECK (quantity > 0),
   unit_price numeric NOT NULL CHECK (unit_price >= 0),
   subtotal numeric GENERATED ALWAYS AS (quantity * unit_price) STORED
@@ -258,28 +260,48 @@ BEGIN
 
   FOR v_item IN SELECT * FROM jsonb_array_elements(p_items)
   LOOP
-    SELECT id, price, stock INTO v_product FROM public.products 
-    WHERE id = (v_item.value->>'product_id')::uuid AND is_active = true FOR UPDATE;
-
-    IF v_product IS NULL THEN
-      RAISE EXCEPTION 'Producto no encontrado o inactivo: %', v_item.value->>'product_id';
-    END IF;
-
-    IF v_product.stock < (v_item.value->>'quantity')::integer THEN
-      RAISE EXCEPTION 'Stock insuficiente para producto: %', v_product.id;
-    END IF;
-
-    v_unit_price := v_product.price;
+    v_unit_price := (v_item.value->>'unit_price')::numeric;
     v_total := v_total + (v_unit_price * (v_item.value->>'quantity')::integer);
 
-    UPDATE public.products 
-    SET stock = stock - (v_item.value->>'quantity')::integer 
-    WHERE id = v_product.id;
+    -- Si es producto, validar y descontar stock
+    IF v_item.value->>'product_id' IS NOT NULL THEN
+      SELECT id, stock INTO v_product FROM public.products 
+      WHERE id = (v_item.value->>'product_id')::uuid AND is_active = true FOR UPDATE;
 
-    INSERT INTO public.sale_items (sale_id, product_id, quantity, unit_price)
+      IF v_product IS NULL THEN
+        RAISE EXCEPTION 'Producto no encontrado: %', v_item.value->>'product_id';
+      END IF;
+
+      IF v_product.stock < (v_item.value->>'quantity')::integer THEN
+        RAISE EXCEPTION 'Stock insuficiente para producto: %', v_product.id;
+      END IF;
+
+      UPDATE public.products 
+      SET stock = stock - (v_item.value->>'quantity')::integer 
+      WHERE id = v_product.id;
+    END IF;
+
+    -- Si es cita, marcar como completada y pagada
+    IF v_item.value->>'appointment_id' IS NOT NULL THEN
+      UPDATE public.appointments 
+      SET status = 'completada', is_paid = true, payment_method = p_payment_method
+      WHERE id = (v_item.value->>'appointment_id')::uuid;
+    END IF;
+
+    -- Registrar el item de venta
+    INSERT INTO public.sale_items (
+      sale_id, 
+      product_id, 
+      service_id, 
+      appointment_id, 
+      quantity, 
+      unit_price
+    )
     VALUES (
       v_sale_id, 
-      v_product.id, 
+      (v_item.value->>'product_id')::uuid, 
+      (v_item.value->>'service_id')::uuid, 
+      (v_item.value->>'appointment_id')::uuid, 
       (v_item.value->>'quantity')::integer, 
       v_unit_price
     );

@@ -58,6 +58,14 @@ export default function DashboardView({ onNavigate, userId }: DashboardViewProps
     popularService: services[0]?.name || '—',
   };
 
+  const newClientsCount = appointments.length > 0 
+    ? new Set(appointments.filter(a => {
+        const sevenDaysAgo = new Date();
+        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+        return new Date(a.appointmentDate) > sevenDaysAgo;
+      }).map(a => a.clientId)).size
+    : 0;
+
   const todayAppointments = appointments.filter(
     (a) => a.status === 'pendiente' || a.status === 'confirmada'
   );
@@ -80,17 +88,18 @@ export default function DashboardView({ onNavigate, userId }: DashboardViewProps
           color="purple"
         />
         <StatCard
-          icon={<Clock size={22} />}
-          value={stats.pendingAppointments}
-          label="Pendientes"
-          color="orange"
+          icon={<Users size={22} />}
+          value={newClientsCount}
+          label="Nuevos (7d)"
+          trend={{ value: 5, isPositive: true }}
+          color="blue"
         />
         <StatCard
           icon={<Users size={22} />}
           value={stats.totalClients}
           label="Clientes Totales"
           trend={{ value: 8, isPositive: true }}
-          color="blue"
+          color="purple"
         />
         <StatCard
           icon={<DollarSign size={22} />}

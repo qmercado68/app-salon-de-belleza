@@ -13,12 +13,13 @@ import SalesView from './views/SalesView';
 import InventoryView from './views/InventoryView';
 import UsersView from './views/UsersView';
 import AdminServicesView from './views/AdminServicesView';
+import POSView from './views/POSView';
 import LoginView from './views/LoginView';
 import { supabase } from '@/lib/supabase';
 import { api } from '@/lib/api';
 import { Profile } from '@/lib/types';
 
-type ViewId = 'login' | 'dashboard' | 'services' | 'appointments' | 'book' | 'profile' | 'admin' | 'reports' | 'sales' | 'inventory' | 'users' | 'admin-services';
+type ViewId = 'login' | 'dashboard' | 'services' | 'appointments' | 'book' | 'profile' | 'admin' | 'reports' | 'sales' | 'inventory' | 'users' | 'admin-services' | 'pos';
 
 const pageTitles: Record<ViewId, { title: string; subtitle?: string }> = {
   login: { title: 'Iniciar Sesión' },
@@ -33,6 +34,7 @@ const pageTitles: Record<ViewId, { title: string; subtitle?: string }> = {
   inventory: { title: 'Inventario de Productos', subtitle: 'Gestión de catálogo, existencias y precios' },
   users: { title: 'Directorio de Usuarios', subtitle: 'Gestión completa de clientes, administradores y staff' },
   'admin-services': { title: 'Gestión de Catálogo', subtitle: 'Administra tus servicios, precios e imágenes' },
+  pos: { title: 'Punto de Venta', subtitle: 'Venta rápida de productos y cobro a clientes' },
 };
 
 export default function HomePage() {
@@ -134,6 +136,8 @@ export default function HomePage() {
         return <UsersView currentViewerRole={userRole} />;
       case 'admin-services':
         return <AdminServicesView currentViewerRole={userRole} />;
+      case 'pos':
+        return <POSView userId={userId} />;
       default:
         return <DashboardView onNavigate={setCurrentView} userId={userId} />;
     }

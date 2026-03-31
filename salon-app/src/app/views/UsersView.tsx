@@ -44,10 +44,12 @@ export default function UsersView({ currentViewerRole }: UsersViewProps) {
     }
   }, [selectedProfile]);
 
-  const filteredUsers = users.filter((u) => 
-    u.fullName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    u.email.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredUsers = users
+    .filter((u) => 
+      u.fullName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      u.email.toLowerCase().includes(searchTerm.toLowerCase())
+    )
+    .sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
 
   // Si hemos seleccionado a un usuario para editar, renderizamos ProfileView
   if (selectedProfile) {
@@ -143,7 +145,12 @@ export default function UsersView({ currentViewerRole }: UsersViewProps) {
                       <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
                         <Avatar name={u.fullName} size="sm" />
                         <div>
-                          <div style={{ fontWeight: 500 }}>{u.fullName || 'Sin nombre'}</div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                            <div style={{ fontWeight: 500 }}>{u.fullName || 'Sin nombre'}</div>
+                            {u.createdAt && new Date(u.createdAt) > new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) && (
+                              <Badge variant="info">NUEVO</Badge>
+                            )}
+                          </div>
                           {u.documentId && <div style={{ fontSize: '0.8rem', color: 'var(--color-text-light)' }}>CI: {u.documentId}</div>}
                         </div>
                       </div>
