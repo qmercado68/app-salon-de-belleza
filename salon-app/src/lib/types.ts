@@ -13,6 +13,9 @@ export type PaymentMethod = 'efectivo' | 'tarjeta' | 'transferencia';
 export interface Profile {
   id: string;
   fullName: string;
+  documentId?: string;
+  birthDate?: string;
+  gender?: 'male' | 'female' | 'other' | '';
   email: string;
   phone: string;
   address: string;
@@ -20,6 +23,7 @@ export interface Profile {
   medicalConditions: string;
   allergies: string;
   role: UserRole;
+  specialty?: string;
   avatarUrl?: string;
   createdAt: string;
   salonId?: string;
@@ -33,6 +37,7 @@ export interface Service {
   price: number;
   category: string;
   imageUrl?: string;
+  isActive?: boolean;
   salonId?: string;
 }
 

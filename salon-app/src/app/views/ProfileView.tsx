@@ -19,13 +19,26 @@ const bloodTypeOptions = [
   { value: 'O+', label: 'O+' }, { value: 'O-', label: 'O-' },
 ];
 
+const genderOptions = [
+  { value: 'male', label: 'Masculino' },
+  { value: 'female', label: 'Femenino' },
+  { value: 'other', label: 'Otro' },
+];
+
+const roleOptions = [
+  { value: 'client', label: 'Cliente' },
+  { value: 'admin', label: 'Administrador' },
+  { value: 'stylist', label: 'Estilista' },
+];
+
 interface ProfileViewProps {
   userId: string;
   userEmail?: string;
   initialProfile?: Profile;
+  currentViewerRole?: string;
 }
 
-export default function ProfileView({ userId, userEmail, initialProfile }: ProfileViewProps) {
+export default function ProfileView({ userId, userEmail, initialProfile, currentViewerRole }: ProfileViewProps) {
   const [profile, setProfile] = useState<Profile | null>(initialProfile ?? null);
   const [loading, setLoading] = useState(!initialProfile);
   const [saving, setSaving] = useState(false);
@@ -36,19 +49,24 @@ export default function ProfileView({ userId, userEmail, initialProfile }: Profi
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
+    if (!userId) {
+      setLoading(false);
+      return;
+    }
+
     const loadProfile = async () => {
       try {
         setLoading(true);
         const data = await api.getProfile(userId);
         setProfile(data);
       } catch (err: any) {
-        setError(`Error: ${err?.message ?? JSON.stringify(err)}`);
+        setError(`Error al cargar: ${err?.message ?? JSON.stringify(err)}`);
       } finally {
         setLoading(false);
       }
     };
 
-    if (userId) loadProfile();
+    loadProfile();
   }, [userId]);
 
   const handleSave = async () => {
@@ -110,6 +128,7 @@ export default function ProfileView({ userId, userEmail, initialProfile }: Profi
     );
   }
 
+  const isAdmin = currentViewerRole === 'admin' || profile?.role === 'admin';
   const displayEmail = userEmail ?? profile.email;
 
   return (
@@ -195,6 +214,23 @@ export default function ProfileView({ userId, userEmail, initialProfile }: Profi
               onChange={(e) => updateField('fullName', e.target.value)}
             />
             <Input
+              label="Cédula"
+              value={profile.documentId || ''}
+              onChange={(e) => updateField('documentId', e.target.value)}
+            />
+            <Input
+              label="Fecha de Nacimiento"
+              type="date"
+              value={profile.birthDate || ''}
+              onChange={(e) => updateField('birthDate', e.target.value)}
+            />
+            <SelectInput
+              label="Sexo"
+              options={genderOptions}
+              value={profile.gender || ''}
+              onChange={(e) => updateField('gender', e.target.value)}
+            />
+            <Input
               label="Teléfono"
               value={profile.phone}
               onChange={(e) => updateField('phone', e.target.value)}
@@ -211,6 +247,21 @@ export default function ProfileView({ userId, userEmail, initialProfile }: Profi
               value={profile.address}
               onChange={(e) => updateField('address', e.target.value)}
             />
+            <SelectInput
+              label="Rol en el Sistema"
+              options={roleOptions}
+              value={profile.role || 'client'}
+              onChange={(e) => updateField('role', e.target.value)}
+              disabled={!isAdmin}
+            />
+            {profile.role === 'stylist' && (
+              <Input
+                label="Especialidad"
+                value={profile.specialty || ''}
+                placeholder="Ej. Colorista, Manicurista..."
+                onChange={(e) => updateField('specialty', e.target.value)}
+              />
+            )}
           </div>
         </Card>
 

@@ -31,6 +31,8 @@ const navItems: NavItemData[] = [
 
 const adminItems: NavItemData[] = [
   { id: 'admin', label: 'Panel Admin', icon: 'admin', href: '/admin', badge: 2 },
+  { id: 'users', label: 'Usuarios', icon: 'profile', href: '/users' },
+  { id: 'admin-services', label: 'Gestión Servicios', icon: 'services', href: '/admin-services' },
 ];
 
 export default function Sidebar({

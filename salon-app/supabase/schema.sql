@@ -10,12 +10,16 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE TABLE public.profiles (
   id uuid REFERENCES auth.users ON DELETE CASCADE PRIMARY KEY,
   full_name text NOT NULL,
+  document_id text,
+  birth_date date,
+  gender text CHECK (gender IN ('male', 'female', 'other')),
   phone text,
   address text,
   blood_type varchar(5) CHECK (blood_type IN ('A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-')),
   medical_conditions text,
   allergies text,
   role text DEFAULT 'client' CHECK (role IN ('client', 'admin', 'stylist')),
+  specialty text,
   avatar_url text,
   created_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL,
   updated_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL
@@ -66,6 +70,11 @@ CREATE POLICY "Los usuarios pueden actualizar su propio perfil"
 
 CREATE POLICY "Los administradores pueden ver todos los perfiles" 
   ON public.profiles FOR SELECT USING (
+    EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin')
+  );
+
+CREATE POLICY "Los administradores pueden actualizar cualquier perfil"
+  ON public.profiles FOR UPDATE USING (
     EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin')
   );
 
@@ -126,3 +135,158 @@ INSERT INTO public.services (name, description, duration_minutes, price, categor
 ('Tinte Completo', 'Aplicación de color completo con productos premium', 120, 1200, 'Cabello'),
 ('Manicure Gel', 'Manicure con esmalte en gel de larga duración', 60, 450, 'Uñas'),
 ('Facial Hidratante', 'Limpieza profunda e hidratación con productos naturales', 60, 800, 'Facial');
+
+-- ==========================================
+-- STORAGE: BUCKETS Y POLÍTICAS
+-- ==========================================
+INSERT INTO storage.buckets (id, name, public) 
+VALUES ('services_images', 'services_images', true)
+ON CONFLICT (id) DO NOTHING;
+
+CREATE POLICY "Imágenes de servicios públicas"
+  ON storage.objects FOR SELECT USING (bucket_id = 'services_images');
+
+CREATE POLICY "Solo administradores pueden subir imágenes"
+  ON storage.objects FOR INSERT WITH CHECK (
+    bucket_id = 'services_images' AND 
+    EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin')
+  );
+
+CREATE POLICY "Solo administradores pueden eliminar imágenes"
+  ON storage.objects FOR DELETE USING (
+    bucket_id = 'services_images' AND 
+    EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin')
+  );
+
+-- ==========================================
+-- INVENTARIO Y PUNTO DE VENTA (POS)
+-- ==========================================
+
+CREATE TABLE public.products (
+  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  name text NOT NULL,
+  description text,
+  price numeric NOT NULL CHECK (price >= 0),
+  stock integer NOT NULL DEFAULT 0 CHECK (stock >= 0),
+  category text,
+  image_url text,
+  is_active boolean DEFAULT true,
+  salon_id uuid REFERENCES public.salons(id),
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now()
+);
+
+CREATE TRIGGER set_updated_at_products
+  BEFORE UPDATE ON public.products
+  FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
+
+ALTER TABLE public.products ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Cualquiera puede ver productos activos con stock" 
+  ON public.products FOR SELECT USING (is_active = true AND stock > 0);
+
+CREATE POLICY "Administradores pueden gestionar todo el inventario" 
+  ON public.products FOR ALL USING (
+    EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin')
+  );
+
+CREATE TABLE public.product_sales (
+  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  client_id uuid REFERENCES public.profiles(id),
+  seller_id uuid REFERENCES public.profiles(id),
+  total_amount numeric NOT NULL CHECK (total_amount >= 0),
+  payment_method text NOT NULL,
+  status text DEFAULT 'completed' CHECK (status IN ('completed', 'cancelled', 'refunded')),
+  salon_id uuid REFERENCES public.salons(id),
+  created_at timestamp with time zone DEFAULT now()
+);
+
+CREATE TABLE public.sale_items (
+  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  sale_id uuid REFERENCES public.product_sales(id) ON DELETE CASCADE,
+  product_id uuid REFERENCES public.products(id),
+  quantity integer NOT NULL CHECK (quantity > 0),
+  unit_price numeric NOT NULL CHECK (unit_price >= 0),
+  subtotal numeric GENERATED ALWAYS AS (quantity * unit_price) STORED
+);
+
+ALTER TABLE public.product_sales ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.sale_items ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Cualquiera puede ver sus compras" 
+  ON public.product_sales FOR SELECT USING (client_id = auth.uid());
+
+CREATE POLICY "Vendedores/Admins pueden ver todas las ventas" 
+  ON public.product_sales FOR SELECT USING (
+    EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role IN ('admin', 'stylist'))
+  );
+
+CREATE POLICY "Solo administradores y cajeros insertan ventas"
+  ON public.product_sales FOR INSERT WITH CHECK (
+    EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role IN ('admin', 'stylist'))
+  );
+
+CREATE POLICY "Items de compras propias" 
+  ON public.sale_items FOR SELECT USING (
+    EXISTS (SELECT 1 FROM public.product_sales WHERE id = sale_id AND client_id = auth.uid())
+  );
+
+CREATE POLICY "Items vistos y insertados por admin/staff" 
+  ON public.sale_items FOR ALL USING (
+    EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role IN ('admin', 'stylist'))
+  );
+
+-- ==========================================
+-- PROCESAMIENTO ATÓMICO DE LA VENTA
+-- ==========================================
+CREATE OR REPLACE FUNCTION process_sale(
+  p_client_id uuid,
+  p_seller_id uuid,
+  p_payment_method text,
+  p_items jsonb
+) RETURNS uuid AS $$
+DECLARE
+  v_sale_id uuid;
+  v_total numeric := 0;
+  v_item record;
+  v_product record;
+  v_unit_price numeric;
+BEGIN
+  INSERT INTO public.product_sales (client_id, seller_id, total_amount, payment_method)
+  VALUES (p_client_id, p_seller_id, 0, p_payment_method)
+  RETURNING id INTO v_sale_id;
+
+  FOR v_item IN SELECT * FROM jsonb_array_elements(p_items)
+  LOOP
+    SELECT id, price, stock INTO v_product FROM public.products 
+    WHERE id = (v_item.value->>'product_id')::uuid AND is_active = true FOR UPDATE;
+
+    IF v_product IS NULL THEN
+      RAISE EXCEPTION 'Producto no encontrado o inactivo: %', v_item.value->>'product_id';
+    END IF;
+
+    IF v_product.stock < (v_item.value->>'quantity')::integer THEN
+      RAISE EXCEPTION 'Stock insuficiente para producto: %', v_product.id;
+    END IF;
+
+    v_unit_price := v_product.price;
+    v_total := v_total + (v_unit_price * (v_item.value->>'quantity')::integer);
+
+    UPDATE public.products 
+    SET stock = stock - (v_item.value->>'quantity')::integer 
+    WHERE id = v_product.id;
+
+    INSERT INTO public.sale_items (sale_id, product_id, quantity, unit_price)
+    VALUES (
+      v_sale_id, 
+      v_product.id, 
+      (v_item.value->>'quantity')::integer, 
+      v_unit_price
+    );
+  END LOOP;
+
+  UPDATE public.product_sales SET total_amount = v_total WHERE id = v_sale_id;
+
+  RETURN v_sale_id;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;

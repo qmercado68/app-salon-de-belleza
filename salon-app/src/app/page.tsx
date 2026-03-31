@@ -11,12 +11,14 @@ import AdminView from './views/AdminView';
 import ReportsView from './views/ReportsView';
 import SalesView from './views/SalesView';
 import InventoryView from './views/InventoryView';
+import UsersView from './views/UsersView';
+import AdminServicesView from './views/AdminServicesView';
 import LoginView from './views/LoginView';
 import { supabase } from '@/lib/supabase';
 import { api } from '@/lib/api';
 import { Profile } from '@/lib/types';
 
-type ViewId = 'login' | 'dashboard' | 'services' | 'appointments' | 'book' | 'profile' | 'admin' | 'reports' | 'sales' | 'inventory';
+type ViewId = 'login' | 'dashboard' | 'services' | 'appointments' | 'book' | 'profile' | 'admin' | 'reports' | 'sales' | 'inventory' | 'users' | 'admin-services';
 
 const pageTitles: Record<ViewId, { title: string; subtitle?: string }> = {
   login: { title: 'Iniciar Sesión' },
@@ -29,6 +31,8 @@ const pageTitles: Record<ViewId, { title: string; subtitle?: string }> = {
   reports: { title: 'Reportes y Estadísticas', subtitle: 'Análisis detallado del rendimiento de tu salón' },
   sales: { title: 'Ventas y Facturación', subtitle: 'Registro histórico de transacciones y pagos' },
   inventory: { title: 'Inventario de Productos', subtitle: 'Gestión de catálogo, existencias y precios' },
+  users: { title: 'Directorio de Usuarios', subtitle: 'Gestión completa de clientes, administradores y staff' },
+  'admin-services': { title: 'Gestión de Catálogo', subtitle: 'Administra tus servicios, precios e imágenes' },
 };
 
 export default function HomePage() {
@@ -126,6 +130,10 @@ export default function HomePage() {
         return <SalesView />;
       case 'inventory':
         return <InventoryView />;
+      case 'users':
+        return <UsersView currentViewerRole={userRole} />;
+      case 'admin-services':
+        return <AdminServicesView currentViewerRole={userRole} />;
       default:
         return <DashboardView onNavigate={setCurrentView} userId={userId} />;
     }
