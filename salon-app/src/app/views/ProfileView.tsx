@@ -255,12 +255,28 @@ export default function ProfileView({ userId, userEmail, initialProfile, current
               disabled={!isAdmin}
             />
             {profile.role === 'stylist' && (
-              <Input
-                label="Especialidad"
-                value={profile.specialty || ''}
-                placeholder="Ej. Colorista, Manicurista..."
-                onChange={(e) => updateField('specialty', e.target.value)}
-              />
+              <>
+                <Input
+                  label="Especialidad"
+                  value={profile.specialty || ''}
+                  placeholder="Ej. Colorista, Manicurista..."
+                  onChange={(e) => updateField('specialty', e.target.value)}
+                />
+                <Input
+                  label="Hora de Entrada (HR:MIN)"
+                  type="time"
+                  value={profile.workStartTime || '09:00'}
+                  onChange={(e) => updateField('workStartTime', e.target.value)}
+                  disabled={!isAdmin}
+                />
+                <Input
+                  label="Hora de Salida (HR:MIN)"
+                  type="time"
+                  value={profile.workEndTime || '18:00'}
+                  onChange={(e) => updateField('workEndTime', e.target.value)}
+                  disabled={!isAdmin}
+                />
+              </>
             )}
           </div>
         </Card>

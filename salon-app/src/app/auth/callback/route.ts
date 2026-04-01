@@ -27,11 +27,15 @@ export async function GET(request: NextRequest) {
         if (profileError && profileError.code === 'PGRST116') {
           // If profile doesn't exist yet, we try to create it manually as a fallback 
           // (though the trigger should handle it, this is for maximum robustness)
+          const { count } = await supabase
+            .from('profiles')
+            .select('id', { count: 'exact', head: true });
+
           await supabase.from('profiles').insert({
             id: user.id,
             email: user.email,
-            full_name: user.user_metadata?.full_name || 'Nuevo Usuario',
-            role: 'client'
+            full_name: user.user_metadata?.full_name || user.email?.split('@')[0] || 'Nuevo Usuario',
+            role: (count === 0) ? 'admin' : 'client'
           })
         }
 

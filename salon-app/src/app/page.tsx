@@ -50,14 +50,44 @@ export default function HomePage() {
         setUser(authUser);
         
         if (authUser) {
-          try {
-            const userProfile = await api.getProfile(authUser.id);
-            setProfile(userProfile);
-            setCurrentView('dashboard');
-          } catch (error) {
-            console.warn("Profile not synchronized yet, fallback to default.");
-            setCurrentView('dashboard');
+          // Intentar obtener el perfil con reintento
+          let userProfile = null;
+          let retries = 0;
+          while (retries < 3 && !userProfile) {
+            try {
+              userProfile = await api.getProfile(authUser.id);
+            } catch (e) {
+              console.warn(`Intento ${retries + 1} de perfil fallido. Esperando...`);
+              await new Promise(r => setTimeout(r, 1000));
+              retries++;
+            }
           }
+          
+          if (userProfile) {
+            setProfile(userProfile);
+          } else {
+            // Fallback: obtener al menos el rol vía RPC para mostrar el menú correcto
+            console.warn("Perfil no cargado, intentando obtener rol vía RPC...");
+            try {
+              const { data: role } = await supabase.rpc('get_my_role');
+              setProfile({
+                id: authUser.id,
+                fullName: authUser.email?.split('@')[0] || 'Usuario',
+                email: authUser.email || '',
+                role: role || 'client',
+              } as Profile);
+            } catch (rpcError) {
+              console.error("RPC get_my_role también falló:", rpcError);
+              // Último recurso: asignar rol de admin si no hay perfiles
+              setProfile({
+                id: authUser.id,
+                fullName: authUser.email?.split('@')[0] || 'Usuario',
+                email: authUser.email || '',
+                role: 'client',
+              } as Profile);
+            }
+          }
+          setCurrentView('dashboard');
         }
       } catch (err) {
         console.error("Auth check failed:", err);
@@ -79,11 +109,22 @@ export default function HomePage() {
         try {
           const userProfile = await api.getProfile(authUser.id);
           setProfile(userProfile);
-          setCurrentView('dashboard');
         } catch (error) {
           console.warn("Profile fetch failed on state change:", error);
-          setCurrentView('dashboard');
+          // Fallback: obtener rol vía RPC
+          try {
+            const { data: role } = await supabase.rpc('get_my_role');
+            setProfile({
+              id: authUser.id,
+              fullName: authUser.email?.split('@')[0] || 'Usuario',
+              email: authUser.email || '',
+              role: role || 'client',
+            } as Profile);
+          } catch (rpcErr) {
+            console.error("RPC fallback también falló:", rpcErr);
+          }
         }
+        setCurrentView('dashboard');
       } else {
         setProfile(null);
         setCurrentView('login');

@@ -27,6 +27,8 @@ export interface Profile {
   avatarUrl?: string;
   createdAt: string;
   salonId?: string;
+  workStartTime?: string;
+  workEndTime?: string;
 }
 
 export interface Service {
@@ -47,6 +49,8 @@ export interface Stylist {
   specialty: string;
   avatarUrl?: string;
   description?: string;
+  workStartTime?: string;
+  workEndTime?: string;
 }
 
 export interface Product {

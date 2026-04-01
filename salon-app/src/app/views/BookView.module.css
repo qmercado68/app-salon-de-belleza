@@ -167,15 +167,17 @@
   line-height: 1.4;
 }
 
-/* Date Scroller */
+/* Date Scroller - Premium Modern */
 .dateScroller {
   display: flex;
-  gap: var(--space-2);
+  gap: var(--space-4);
   overflow-x: auto;
-  padding: var(--space-2) 0;
-  margin-bottom: var(--space-5);
+  padding: var(--space-4) 0;
+  margin-bottom: var(--space-6);
   -ms-overflow-style: none;
   scrollbar-width: none;
+  scroll-behavior: smooth;
+  scroll-snap-type: x mandatory;
 }
 
 .dateScroller::-webkit-scrollbar {
@@ -183,76 +185,111 @@
 }
 
 .dateChip {
+  scroll-snap-align: start;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 2px;
-  padding: var(--space-3) var(--space-4);
-  border-radius: var(--radius-md);
-  border: 1.5px solid var(--neutral-200);
-  background: var(--bg-card);
+  justify-content: center;
+  gap: var(--space-1);
+  padding: var(--space-3) var(--space-5);
+  border-radius: var(--radius-xl);
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  background: rgba(255, 255, 255, 0.4);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.03);
   cursor: pointer;
-  transition: all var(--transition-fast);
-  min-width: 64px;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  min-width: 80px;
+  height: 90px;
 }
 
 .dateChip:hover {
-  border-color: var(--accent-300);
+  transform: translateY(-4px);
+  box-shadow: 0 8px 24px rgba(108, 99, 255, 0.1);
+  border-color: rgba(108, 99, 255, 0.3);
+  background: rgba(255, 255, 255, 0.8);
 }
 
 .dateActive {
-  background: var(--accent-500);
-  border-color: var(--accent-500);
+  background: linear-gradient(135deg, var(--accent-500) 0%, var(--primary-600) 100%);
+  border-color: transparent;
   color: #ffffff;
-  box-shadow: 0 4px 12px rgba(108, 99, 255, 0.3);
+  box-shadow: 0 8px 32px rgba(108, 99, 255, 0.4);
+  transform: translateY(-4px);
 }
 
 .dayName {
   font-size: var(--text-xs);
   text-transform: uppercase;
-  font-weight: 500;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  opacity: 0.8;
 }
 
 .dayNum {
-  font-size: var(--text-lg);
+  font-size: 1.75rem;
+  font-family: var(--font-display);
   font-weight: 700;
+  line-height: 1;
 }
 
-/* Time Grid */
+/* Time Grid - Premium Modern */
 .timeGrid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
-  gap: var(--space-2);
+  grid-template-columns: repeat(auto-fill, minmax(90px, 1fr));
+  gap: var(--space-3);
+  padding-bottom: var(--space-4);
 }
 
 .timeSlot {
-  padding: var(--space-3);
-  border-radius: var(--radius-md);
-  border: 1.5px solid var(--neutral-200);
-  background: var(--bg-card);
+  padding: var(--space-3) var(--space-2);
+  border-radius: var(--radius-lg);
+  border: 1px solid rgba(0, 0, 0, 0.05);
+  background: #ffffff;
   font-size: var(--text-sm);
   font-weight: 600;
   cursor: pointer;
-  transition: all var(--transition-fast);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   text-align: center;
   color: var(--neutral-700);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.02);
 }
 
 .timeSlot:hover:not(.timeDisabled) {
   border-color: var(--accent-300);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(108, 99, 255, 0.1);
+  color: var(--accent-600);
 }
 
 .timeActive {
-  background: var(--accent-500);
-  border-color: var(--accent-500);
-  color: #ffffff;
-  box-shadow: 0 4px 12px rgba(108, 99, 255, 0.3);
+  background: var(--accent-50);
+  border: 2px solid var(--accent-500);
+  color: var(--accent-700);
+  box-shadow: 0 4px 16px rgba(108, 99, 255, 0.2);
+  transform: scale(1.05);
+  font-weight: 800;
 }
 
 .timeDisabled {
-  opacity: 0.35;
+  background: var(--neutral-50);
+  color: var(--neutral-400);
+  border: 1px dashed var(--neutral-200);
   cursor: not-allowed;
-  text-decoration: line-through;
+  position: relative;
+  overflow: hidden;
+}
+
+.timeDisabled::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 10%;
+  right: 10%;
+  height: 1.5px;
+  background-color: var(--neutral-300);
+  transform: translateY(-50%) rotate(-10deg);
 }
 
 /* Nav Buttons */

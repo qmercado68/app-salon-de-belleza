@@ -185,18 +185,24 @@ export const mockStylists: Stylist[] = [
     name: 'Ana Rodríguez',
     specialty: 'Colorista Senior & Corte',
     description: 'Especialista en Balayage y cambios de imagen con más de 10 años de experiencia.',
+    workStartTime: '09:00',
+    workEndTime: '15:00',
   },
   {
     id: 'sty-002',
     name: 'Lucía Vega',
     specialty: 'Manicurista & Faciales',
     description: 'Experta en diseño de uñas y tratamientos faciales rejuvenecedores.',
+    workStartTime: '12:00',
+    workEndTime: '19:00',
   },
   {
     id: 'sty-003',
     name: 'Karla Luna',
     specialty: 'Peinados & Maquillaje',
     description: 'Especialista en novias y maquillaje para eventos sociales.',
+    workStartTime: '09:00',
+    workEndTime: '18:00',
   },
 ];
 

@@ -1,11 +1,10 @@
-'use client';
-
-import React, { useState, useEffect } from 'react';
-import { ChevronLeft, ChevronRight, Check } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { ChevronLeft, ChevronRight, Check, Search } from 'lucide-react';
 import styles from './BookView.module.css';
 import Card from '@/components/atoms/Card/Card';
 import Button from '@/components/atoms/Button/Button';
 import Avatar from '@/components/atoms/Avatar/Avatar';
+import Input from '@/components/atoms/Input/Input';
 import { generateTimeSlots } from '@/lib/mockData';
 import { api } from '@/lib/api';
 import { Service, Stylist } from '@/lib/types';
@@ -22,11 +21,6 @@ const categoryIcons: Record<string, string> = {
   'Cuerpo': '✨', 'Maquillaje': '💄',
 };
 
-// Placeholder stylist list (stylists table not yet implemented)
-const PLACEHOLDER_STYLISTS: Stylist[] = [
-  { id: 'sty-1', name: 'Profesional disponible', specialty: 'Todos los servicios', description: 'Se asignará al confirmar la cita.' },
-];
-
 export default function BookView({ onSuccess, userId }: BookViewProps) {
   const [step, setStep] = useState<Step>('service');
   const [selectedService, setSelectedService] = useState<Service | null>(null);
@@ -34,15 +28,20 @@ export default function BookView({ onSuccess, userId }: BookViewProps) {
   const [selectedDate, setSelectedDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [selectedTime, setSelectedTime] = useState('');
   const [isBooked, setIsBooked] = useState(false);
+  
   const [services, setServices] = useState<Service[]>([]);
   const [loadingServices, setLoadingServices] = useState(true);
+  
+  const [stylists, setStylists] = useState<Stylist[]>([]);
+  const [loadingStylists, setLoadingStylists] = useState(false);
+  const [stylistQuery, setStylistQuery] = useState('');
 
   useEffect(() => {
     const fetchServices = async () => {
       try {
         setLoadingServices(true);
         const data = await api.getServices(userId);
-        setServices(data);
+        setServices(data.filter(s => s.isActive));
       } catch (err) {
         console.error('Error al cargar servicios:', err);
       } finally {
@@ -52,9 +51,54 @@ export default function BookView({ onSuccess, userId }: BookViewProps) {
     fetchServices();
   }, [userId]);
 
-  const timeSlots = generateTimeSlots(selectedDate);
+  useEffect(() => {
+    if (step === 'stylist' && stylists.length === 0) {
+      const fetchStylists = async () => {
+        try {
+          setLoadingStylists(true);
+          const data = await api.getStylists();
+          setStylists(data);
+        } catch (err) {
+          console.error('Error al cargar estilistas:', err);
+        } finally {
+          setLoadingStylists(false);
+        }
+      };
+      fetchStylists();
+    }
+  }, [step]);
 
-  // Generate calendar days (next 14 days from today)
+  // Filtering stylists
+  const filteredStylists = useMemo(() => {
+    return stylists.filter(s => 
+      s.name.toLowerCase().includes(stylistQuery.toLowerCase()) ||
+      s.specialty.toLowerCase().includes(stylistQuery.toLowerCase())
+    );
+  }, [stylists, stylistQuery]);
+
+  const [timeSlots, setTimeSlots] = useState<{time: string, available: boolean}[]>([]);
+  const [loadingTimeSlots, setLoadingTimeSlots] = useState(false);
+
+  useEffect(() => {
+    if (step === 'datetime' && selectedStylist && selectedService) {
+      const fetchTimeSlots = async () => {
+        try {
+          setLoadingTimeSlots(true);
+          const workStart = selectedStylist.workStartTime || '09:00';
+          const workEnd = selectedStylist.workEndTime || '18:00';
+          const slots = await api.getAvailableTimeSlots(selectedDate, selectedStylist.id, selectedService.durationMinutes, workStart, workEnd);
+          setTimeSlots(slots);
+        } catch (err) {
+          console.error('Error fetching time slots:', err);
+        } finally {
+          setLoadingTimeSlots(false);
+        }
+      };
+      fetchTimeSlots();
+    }
+  }, [step, selectedDate, selectedStylist, selectedService]);
+
+  // Generate calendar days
   const today = new Date();
   const calendarDays: Date[] = [];
   for (let i = 0; i < 14; i++) {
@@ -127,7 +171,7 @@ export default function BookView({ onSuccess, userId }: BookViewProps) {
         <div className={styles.section}>
           <h3 className={styles.sectionTitle}>¿Qué servicio deseas?</h3>
           {loadingServices ? (
-            <p>Cargando...</p>
+            <p>Cargando catálogo...</p>
           ) : (
             <div className={styles.serviceGrid}>
               {services.map((srv) => (
@@ -161,22 +205,42 @@ export default function BookView({ onSuccess, userId }: BookViewProps) {
       {step === 'stylist' && (
         <div className={styles.section}>
           <h3 className={styles.sectionTitle}>Selecciona un profesional</h3>
-          <div className={styles.stylistGrid}>
-            {PLACEHOLDER_STYLISTS.map((sty) => (
-              <div
-                key={sty.id}
-                className={`${styles.stylistCard} ${selectedStylist?.id === sty.id ? styles.selected : ''}`}
-                onClick={() => setSelectedStylist(sty)}
-              >
-                <Avatar name={sty.name} size="lg" />
-                <div className={styles.stylistInfo}>
-                  <span className={styles.stylistName}>{sty.name}</span>
-                  <span className={styles.stylistSpecialty}>{sty.specialty}</span>
-                  <p className={styles.stylistDesc}>{sty.description}</p>
-                </div>
-              </div>
-            ))}
+          
+          <div style={{ marginBottom: '1.5rem' }}>
+            <Input 
+              icon={<Search size={18} />}
+              placeholder="Buscar por nombre o especialidad..."
+              value={stylistQuery}
+              onChange={(e) => setStylistQuery(e.target.value)}
+            />
           </div>
+
+          {loadingStylists ? (
+            <p>Buscando profesionales...</p>
+          ) : (
+            <div className={styles.stylistGrid}>
+              {filteredStylists.map((sty) => (
+                <div
+                  key={sty.id}
+                  className={`${styles.stylistCard} ${selectedStylist?.id === sty.id ? styles.selected : ''}`}
+                  onClick={() => setSelectedStylist(sty)}
+                >
+                  <Avatar name={sty.name} size="lg" imageUrl={sty.avatarUrl} />
+                  <div className={styles.stylistInfo}>
+                    <span className={styles.stylistName}>{sty.name}</span>
+                    <span className={styles.stylistSpecialty}>{sty.specialty}</span>
+                    <p className={styles.stylistDesc}>{sty.description}</p>
+                  </div>
+                </div>
+              ))}
+              {filteredStylists.length === 0 && (
+                <div style={{ textAlign: 'center', gridColumn: '1 / -1', padding: '2rem', color: 'var(--neutral-500)' }}>
+                  <p>No se encontraron profesionales que coincidan con tu búsqueda.</p>
+                </div>
+              )}
+            </div>
+          )}
+
           <div className={styles.navButtons}>
             <Button variant="ghost" onClick={() => setStep('service')} icon={<ChevronLeft size={18} />}>
               Atrás
@@ -218,17 +282,30 @@ export default function BookView({ onSuccess, userId }: BookViewProps) {
           </div>
 
           {/* Time Slots */}
-          <div className={styles.timeGrid}>
-            {timeSlots.map((slot) => (
-              <button
-                key={slot.time}
-                className={`${styles.timeSlot} ${selectedTime === slot.time ? styles.timeActive : ''} ${!slot.available ? styles.timeDisabled : ''}`}
-                onClick={() => slot.available && setSelectedTime(slot.time)}
-                disabled={!slot.available}
-              >
-                {slot.time}
-              </button>
-            ))}
+          <div style={{ minHeight: '120px' }}>
+            {loadingTimeSlots ? (
+              <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100px', color: 'var(--neutral-400)' }}>
+                Consultando disponibilidad...
+              </div>
+            ) : timeSlots.length > 0 ? (
+              <div className={styles.timeGrid}>
+                {timeSlots.map((slot) => (
+                  <button
+                    key={slot.time}
+                    className={`${styles.timeSlot} ${selectedTime === slot.time ? styles.timeActive : ''} ${!slot.available ? styles.timeDisabled : ''}`}
+                    onClick={() => slot.available && setSelectedTime(slot.time)}
+                    disabled={!slot.available}
+                    title={!slot.available ? 'Horario ocupado' : 'Disponible'}
+                  >
+                    {slot.time}
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--neutral-500)' }}>
+                No hay horarios disponibles para esta fecha.
+              </div>
+            )}
           </div>
 
           <div className={styles.navButtons}>

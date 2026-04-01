@@ -6,7 +6,7 @@ import {
   mockCurrentUser,
   mockClients
 } from './mockData';
-import { Service, Appointment, Profile, Product, ProductSale, SaleItem, DailyReportSummary } from './types';
+import { Service, Appointment, Profile, Product, ProductSale, SaleItem, DailyReportSummary, Stylist, TimeSlot } from './types';
 import { mockProducts, mockProductSales } from './mockData';
 
 // ==========================================
@@ -98,6 +98,20 @@ export const api = {
     if (error) throw error;
   },
 
+  async deleteService(id: string): Promise<void> {
+    if (!isSupabaseConfigured()) {
+      console.log('Mock: Servicio eliminado', id);
+      return;
+    }
+
+    const { error } = await supabase
+      .from('services')
+      .delete()
+      .eq('id', id);
+
+    if (error) throw error;
+  },
+
   // PROFILES
   async getAllProfiles(): Promise<Profile[]> {
     if (!isSupabaseConfigured()) {
@@ -128,7 +142,36 @@ export const api = {
       avatarUrl: d.avatar_url ?? undefined,
       salonId: d.salon_id ?? undefined,
       createdAt: d.created_at ?? '',
+      workStartTime: d.work_start_time ? d.work_start_time.substring(0, 5) : undefined,
+      workEndTime: d.work_end_time ? d.work_end_time.substring(0, 5) : undefined,
     })) as Profile[];
+  },
+
+  async getStylists(): Promise<Stylist[]> {
+    if (!isSupabaseConfigured()) {
+      return [
+        { id: 'sty-1', name: 'Ana Rodríguez', specialty: 'Colorista Senior', description: 'Experta en balayage.', workStartTime: '09:00', workEndTime: '15:00' },
+        { id: 'sty-2', name: 'Carlos López', specialty: 'Estilista', description: 'Cortes modernos.', workStartTime: '12:00', workEndTime: '19:00' },
+      ];
+    }
+
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('id, full_name, specialty, avatar_url, medical_conditions, work_start_time, work_end_time')
+      .eq('role', 'stylist')
+      .order('full_name', { ascending: true });
+
+    if (error) throw error;
+    
+    return (data as any[]).map((d) => ({
+      id: d.id,
+      name: d.full_name ?? '',
+      specialty: d.specialty ?? 'Estilista',
+      avatarUrl: d.avatar_url ?? undefined,
+      description: d.medical_conditions ?? '',
+      workStartTime: d.work_start_time ? d.work_start_time.substring(0, 5) : '09:00', // Time comes as HH:mm:ss, convert to HH:mm
+      workEndTime: d.work_end_time ? d.work_end_time.substring(0, 5) : '18:00',
+    })) as Stylist[];
   },
 
   async getProfile(userId: string): Promise<Profile> {
@@ -159,6 +202,8 @@ export const api = {
       avatarUrl: d.avatar_url ?? undefined,
       salonId: d.salon_id ?? undefined,
       createdAt: d.created_at ?? '',
+      workStartTime: d.work_start_time ? d.work_start_time.substring(0, 5) : undefined,
+      workEndTime: d.work_end_time ? d.work_end_time.substring(0, 5) : undefined,
     } as Profile;
   },
 
@@ -182,6 +227,8 @@ export const api = {
     if (profile.specialty !== undefined) payload.specialty = profile.specialty || null;
     if (profile.avatarUrl !== undefined) payload.avatar_url = profile.avatarUrl;
     if (profile.salonId !== undefined) payload.salon_id = profile.salonId;
+    if (profile.workStartTime !== undefined) payload.work_start_time = profile.workStartTime ? `${profile.workStartTime}:00` : null;
+    if (profile.workEndTime !== undefined) payload.work_end_time = profile.workEndTime ? `${profile.workEndTime}:00` : null;
 
     const { error } = await supabase
       .from('profiles')
@@ -244,6 +291,70 @@ export const api = {
       .insert(payload);
 
     if (error) throw error;
+  },
+
+  async getAvailableTimeSlots(date: string, stylistId: string, durationMinutes: number, workStartTimeStr: string = '09:00', workEndTimeStr: string = '18:00'): Promise<TimeSlot[]> {
+    const baseSlots: string[] = [];
+    
+    // Parse work bounds
+    const [startH, startM] = workStartTimeStr.split(':').map(Number);
+    const [endH, endM] = workEndTimeStr.split(':').map(Number);
+    const startTotalMins = (startH || 9) * 60 + (startM || 0);
+    const endTotalMins = (endH || 18) * 60 + (endM || 0);
+
+    for (let currentMins = startTotalMins; currentMins < endTotalMins; currentMins += 30) {
+      if (currentMins + durationMinutes > endTotalMins) {
+        continue; // Don't allow scheduling if the service would finish after work ends
+      }
+      const h = Math.floor(currentMins / 60).toString().padStart(2, '0');
+      const m = (currentMins % 60).toString().padStart(2, '0');
+      baseSlots.push(`${h}:${m}`);
+    }
+
+    if (!isSupabaseConfigured() || !stylistId) {
+      return baseSlots.map(time => ({ time, available: true }));
+    }
+
+    const startOfDay = `${date}T00:00:00.000Z`;
+    const endOfDay = `${date}T23:59:59.999Z`;
+
+    // Fetch existing appointments for the stylist on that day
+    const { data: appointments, error } = await supabase
+      .from('appointments')
+      .select('appointment_date, services(duration_minutes), status')
+      .eq('stylist_id', stylistId)
+      .neq('status', 'cancelada')
+      .gte('appointment_date', startOfDay)
+      .lte('appointment_date', endOfDay);
+
+    if (error) {
+      console.error('Error fetching appointments for slots:', error);
+      return baseSlots.map(time => ({ time, available: true })); // fallback
+    }
+
+    // Parse each appointment into a start and end time (in minutes from midnight)
+    const occupiedRanges = (appointments || []).map((appt: any) => {
+      const d = new Date(appt.appointment_date);
+      const startMins = d.getHours() * 60 + d.getMinutes();
+      const dur = appt.services?.duration_minutes || 30; // default to 30 if null
+      return { start: startMins, end: startMins + dur };
+    });
+
+    return baseSlots.map(time => {
+      const [h, m] = time.split(':').map(Number);
+      const slotStart = h * 60 + m;
+      const slotEnd = slotStart + durationMinutes;
+
+      // Check if [slotStart, slotEnd) overlaps with any [occupied.start, occupied.end)
+      const isOccupied = occupiedRanges.some(
+        (range: {start: number; end: number}) => slotStart < range.end && slotEnd > range.start
+      );
+
+      return {
+        time,
+        available: !isOccupied
+      };
+    });
   },
 
   // AVATAR / STORAGE

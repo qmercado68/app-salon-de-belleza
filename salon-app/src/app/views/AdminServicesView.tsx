@@ -1,7 +1,11 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
-import { Settings, Plus, Edit2, ShieldAlert, Image as ImageIcon, Power, PowerOff } from 'lucide-react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { 
+  Settings, Plus, Edit2, ShieldAlert, Image as ImageIcon, 
+  Power, PowerOff, Search, Trash2, X, Filter, 
+  ChevronRight, AlertCircle, CheckCircle2 
+} from 'lucide-react';
 import styles from './AdminServicesView.module.css';
 import Card from '@/components/atoms/Card/Card';
 import Badge from '@/components/atoms/Badge/Badge';
@@ -19,10 +23,18 @@ export default function AdminServicesView({ currentViewerRole }: AdminServicesVi
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   
+  // States for search and filter
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState('Todas');
+  
+  // Modal and Editing states
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingService, setEditingService] = useState<Partial<Service>>({});
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [saving, setSaving] = useState(false);
+  
+  // Delete confirmation
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -44,15 +56,15 @@ export default function AdminServicesView({ currentViewerRole }: AdminServicesVi
     }
   }, [currentViewerRole]);
 
-  if (currentViewerRole !== 'admin') {
-    return (
-      <div style={{ textAlign: 'center', padding: '3rem' }}>
-        <ShieldAlert size={48} style={{ margin: '0 auto', color: 'var(--color-warning)' }} />
-        <h2>Acceso Restringido</h2>
-        <p>Solo los administradores pueden gestionar el catálogo de servicios.</p>
-      </div>
-    );
-  }
+  // Filtering logic
+  const filteredServices = useMemo(() => {
+    return services.filter(service => {
+      const matchesSearch = service.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+                          service.description.toLowerCase().includes(searchQuery.toLowerCase());
+      const matchesCategory = selectedCategory === 'Todas' || service.category === selectedCategory;
+      return matchesSearch && matchesCategory;
+    });
+  }, [services, searchQuery, selectedCategory]);
 
   const handleOpenModal = (service?: Service) => {
     if (service) {
@@ -74,14 +86,28 @@ export default function AdminServicesView({ currentViewerRole }: AdminServicesVi
   const handleToggleActive = async (service: Service) => {
     try {
       await api.updateService(service.id, { isActive: !service.isActive });
-      // Update local state for immediate feedback
       setServices(prev => prev.map(s => s.id === service.id ? { ...s, isActive: !service.isActive } : s));
     } catch (err: any) {
       alert(`Error al cambiar estado: ${err?.message}`);
     }
   };
 
+  const handleDelete = async (id: string) => {
+    try {
+      await api.deleteService(id);
+      setServices(prev => prev.filter(s => s.id !== id));
+      setDeletingId(null);
+    } catch (err: any) {
+      alert(`Error al eliminar: ${err?.message}`);
+    }
+  };
+
   const handleSave = async () => {
+    if (!editingService.name || !editingService.price) {
+      alert('Por favor completa los campos obligatorios.');
+      return;
+    }
+
     try {
       setSaving(true);
       let imageUrl = editingService.imageUrl;
@@ -113,133 +139,205 @@ export default function AdminServicesView({ currentViewerRole }: AdminServicesVi
     }
   };
 
-  if (loading) return <div>Cargando panel de servicios...</div>;
-  if (error) return <div style={{ color: 'var(--color-danger)' }}>{error}</div>;
+  if (currentViewerRole !== 'admin') {
+    return (
+      <div className={styles.restricted}>
+        <ShieldAlert size={64} className={styles.restrictedIcon} />
+        <h2>Acceso Restringido</h2>
+        <p>Solo los administradores pueden gestionar el catálogo de servicios.</p>
+        <Button variant="primary" onClick={() => window.location.href = '/'}>Volver al Inicio</Button>
+      </div>
+    );
+  }
 
-  const categoryOptions = [
-    { value: 'Cabello', label: 'Cabello' },
-    { value: 'Uñas', label: 'Uñas' },
-    { value: 'Facial', label: 'Facial' },
-    { value: 'Maquillaje', label: 'Maquillaje' },
-    { value: 'Masajes', label: 'Masajes' },
-    { value: 'Spa', label: 'Spa General' },
-  ];
+  if (loading && services.length === 0) return (
+    <div className={styles.loadingState}>
+      <div className={styles.spinner}></div>
+      <p>Cargando catálogo de servicios...</p>
+    </div>
+  );
+
+  const categories = ['Todas', 'Cabello', 'Uñas', 'Facial', 'Maquillaje', 'Masajes', 'Spa'];
+  const categoryOptions = categories.filter(c => c !== 'Todas').map(c => ({ value: c, label: c }));
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', width: '100%' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <Settings size={28} color="var(--color-primary)" />
-          <h1 style={{ fontSize: '1.5rem', fontWeight: 600 }}>Gestión de Servicios</h1>
+    <div className={styles.view}>
+      {/* Header Section */}
+      <div className={styles.header}>
+        <div className={styles.titleGroup}>
+          <div className={styles.titleIcon}>
+            <Settings size={28} />
+          </div>
+          <div>
+            <h1 className={styles.title}>Gestión de Servicios</h1>
+            <p style={{ color: 'var(--neutral-500)', fontSize: '0.875rem' }}>
+              Administra el catálogo de belleza y bienestar del salón
+            </p>
+          </div>
         </div>
-        <Button onClick={() => handleOpenModal()} style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-          <Plus size={18} /> Nuevo Servicio
+        <Button onClick={() => handleOpenModal()} variant="primary" className={styles.addBtn}>
+          <Plus size={20} /> Nuevo Servicio
         </Button>
       </div>
 
-      <Card>
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+      {/* Toolbar / Filters */}
+      <div className={styles.toolbar}>
+        <div className={styles.searchWrapper}>
+          <Input 
+            icon={<Search size={18} />}
+            placeholder="Buscar por nombre o descripción..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
+        </div>
+        <div className={styles.filterWrapper}>
+          <SelectInput 
+            label="Categoría"
+            options={categories.map(c => ({ value: c, label: c }))}
+            value={selectedCategory}
+            onChange={(e) => setSelectedCategory(e.target.value)}
+          />
+        </div>
+        <div className={styles.countBadge}>
+          <span style={{ fontWeight: 600 }}>{filteredServices.length}</span> servicios
+        </div>
+      </div>
+
+      {/* Main Table Container */}
+      <div className={styles.tableContainer}>
+        <div className={styles.tableWrapper}>
+          <table className={styles.table}>
             <thead>
-              <tr style={{ borderBottom: '2px solid var(--color-border)' }}>
-                <th style={{ padding: '1rem', fontWeight: 600 }}>Servicio</th>
-                <th style={{ padding: '1rem', fontWeight: 600 }}>Categoría</th>
-                <th style={{ padding: '1rem', fontWeight: 600 }}>Precio / Duración</th>
-                <th style={{ padding: '1rem', fontWeight: 600 }}>Estado</th>
-                <th style={{ padding: '1rem', fontWeight: 600 }}>Acciones</th>
+              <tr>
+                <th>Servicio</th>
+                <th>Categoría</th>
+                <th>Precio / Duración</th>
+                <th>Estado</th>
+                <th>Acciones</th>
               </tr>
             </thead>
             <tbody>
-              {services.map((s) => (
-                <tr key={s.id} style={{ borderBottom: '1px solid var(--color-border)', opacity: s.isActive ? 1 : 0.6 }}>
-                  <td style={{ padding: '1rem' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+              {filteredServices.map((s) => (
+                <tr key={s.id} style={{ opacity: s.isActive ? 1 : 0.6 }}>
+                  <td>
+                    <div className={styles.serviceInfo}>
                       {s.imageUrl ? (
-                        <div style={{ width: '40px', height: '40px', borderRadius: '8px', backgroundImage: `url(${s.imageUrl})`, backgroundSize: 'cover' }} />
+                        <img src={s.imageUrl} alt={s.name} className={styles.image} />
                       ) : (
-                        <div style={{ width: '40px', height: '40px', borderRadius: '8px', background: 'var(--color-background-soft)', display: 'flex', alignItems:'center', justifyContent:'center' }}>
-                          <ImageIcon size={20} color="var(--color-text-light)" />
+                        <div className={styles.imagePlaceholder}>
+                          <ImageIcon size={24} />
                         </div>
                       )}
-                      <div>
-                        <div style={{ fontWeight: 500 }}>{s.name}</div>
-                        <div style={{ fontSize: '0.8rem', color: 'var(--color-text-light)', maxWidth: '200px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                          {s.description}
-                        </div>
+                      <div className={styles.nameGroup}>
+                        <span className={styles.name}>{s.name}</span>
+                        <span className={styles.description}>{s.description}</span>
                       </div>
                     </div>
                   </td>
-                  <td style={{ padding: '1rem' }}><Badge variant="info">{s.category}</Badge></td>
-                  <td style={{ padding: '1rem' }}>
-                    <div style={{ fontWeight: 600 }}>${s.price.toFixed(2)}</div>
-                    <div style={{ fontSize: '0.85rem', color: 'var(--color-text-light)' }}>{s.durationMinutes} min</div>
+                  <td>
+                    <Badge variant={
+                      s.category === 'Cabello' ? 'info' : 
+                      s.category === 'Uñas' ? 'info' : 
+                      s.category === 'Facial' ? 'confirmada' : 'pendiente'
+                    }>
+                      {s.category}
+                    </Badge>
                   </td>
-                  <td style={{ padding: '1rem' }}>
+                  <td>
+                    <div className={styles.priceWrapper}>
+                      <span className={styles.price}>${s.price.toFixed(2)}</span>
+                      <span className={styles.duration}>{s.durationMinutes} min</span>
+                    </div>
+                  </td>
+                  <td>
                     {s.isActive ? (
                       <Badge variant="confirmada">Activo</Badge>
                     ) : (
                       <Badge variant="cancelada">Inactivo</Badge>
                     )}
                   </td>
-                  <td style={{ padding: '1rem' }}>
-                    <div style={{ display: 'flex', gap: '0.5rem' }}>
-                      <Button size="sm" variant="outline" onClick={() => handleOpenModal(s)}>
-                        <Edit2 size={14} />
-                      </Button>
-                      <Button size="sm" variant={s.isActive ? 'danger' : 'primary'} onClick={() => handleToggleActive(s)} title={s.isActive ? 'Desactivar' : 'Activar'}>
-                        {s.isActive ? <PowerOff size={14} /> : <Power size={14} />}
-                      </Button>
+                  <td>
+                    <div className={styles.actions}>
+                      <button 
+                        className={`${styles.actionBtn} ${styles.editBtn}`} 
+                        onClick={() => handleOpenModal(s)}
+                        title="Editar"
+                      >
+                        <Edit2 size={16} />
+                      </button>
+                      <button 
+                        className={`${styles.actionBtn} ${styles.statusBtn}`} 
+                        onClick={() => handleToggleActive(s)}
+                        title={s.isActive ? 'Desactivar' : 'Activar'}
+                      >
+                        {s.isActive ? <PowerOff size={16} /> : <Power size={16} />}
+                      </button>
+                      
+                      {deletingId === s.id ? (
+                        <div className={styles.confirmPopover}>
+                          <button onClick={() => handleDelete(s.id)} style={{ color: 'var(--danger-600)', padding: '4px' }}>OK</button>
+                          <button onClick={() => setDeletingId(null)} style={{ padding: '4px' }}>X</button>
+                        </div>
+                      ) : (
+                        <button 
+                          className={`${styles.actionBtn} ${styles.deleteBtn}`} 
+                          onClick={() => setDeletingId(s.id)}
+                          title="Eliminar"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>
               ))}
-              {services.length === 0 && (
+              {filteredServices.length === 0 && (
                 <tr>
-                  <td colSpan={5} style={{ textAlign: 'center', padding: '2rem' }}>No hay servicios registrados.</td>
+                  <td colSpan={5} style={{ textAlign: 'center', padding: '4rem' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem', color: 'var(--neutral-400)' }}>
+                      <Search size={48} />
+                      <p>No se encontraron servicios con los filtros actuales.</p>
+                      <Button variant="outline" onClick={() => { setSearchQuery(''); setSelectedCategory('Todas'); }}>
+                        Limpiar filtros
+                      </Button>
+                    </div>
+                  </td>
                 </tr>
               )}
             </tbody>
           </table>
         </div>
-      </Card>
+      </div>
 
-      {/* MODAL / BOTTOM SHEET SIMPLIFICADO OVERLAY */}
+      {/* MODAL / BOTTOM SHEET */}
       {isModalOpen && (
-        <div style={{
-          position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', 
-          background: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', 
-          alignItems: 'center', justifyContent: 'center'
-        }}>
-          <div style={{ 
-            background: 'var(--color-surface)', width: '100%', maxWidth: '500px', 
-            borderRadius: '16px', padding: '2rem', maxHeight: '90vh', overflowY: 'auto' 
-          }}>
-            <h2 style={{ marginBottom: '1.5rem', fontSize: '1.25rem' }}>
-              {editingService.id ? 'Editar Servicio' : 'Nuevo Servicio'}
-            </h2>
+        <div className={styles.modalOverlay} onClick={(e) => e.target === e.currentTarget && setIsModalOpen(false)}>
+          <div className={styles.modal}>
+            <div className={styles.modalHeader}>
+              <h2 className={styles.modalTitle}>
+                {editingService.id ? 'Editar Servicio' : 'Nuevo Servicio'}
+              </h2>
+              <button className={styles.closeBtn} onClick={() => setIsModalOpen(false)}>
+                <X size={24} />
+              </button>
+            </div>
             
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              
-              <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-start' }}>
+            <div className={styles.modalBody}>
+              <div className={styles.imageUploadZone}>
                 <div 
+                  className={styles.previewBox}
                   onClick={() => fileInputRef.current?.click()}
-                  style={{ 
-                    width: '100px', height: '100px', borderRadius: '12px', 
-                    background: 'var(--color-background)', border: '2px dashed var(--color-border)',
-                    display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-                    cursor: 'pointer', overflow: 'hidden', position: 'relative'
-                  }}
                 >
                   {(selectedFile || editingService.imageUrl) ? (
                     <img 
                       src={selectedFile ? URL.createObjectURL(selectedFile) : editingService.imageUrl} 
-                      style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
+                      className={styles.previewImg} 
                       alt="Preview"
                     />
                   ) : (
                     <>
-                      <ImageIcon size={24} color="var(--color-text-light)" />
-                      <span style={{ fontSize: '0.75rem', marginTop: '0.25rem', color: 'var(--color-text-light)' }}>Foto</span>
+                      <ImageIcon size={32} />
+                      <span style={{ fontSize: '0.75rem', marginTop: '0.5rem' }}>Subir Foto</span>
                     </>
                   )}
                 </div>
@@ -247,6 +345,7 @@ export default function AdminServicesView({ currentViewerRole }: AdminServicesVi
                 <div style={{ flex: 1 }}>
                   <Input 
                     label="Nombre del Servicio" 
+                    placeholder="Ej. Corte de Cabello Dama"
                     value={editingService.name || ''} 
                     onChange={e => setEditingService({...editingService, name: e.target.value})} 
                   />
@@ -254,12 +353,13 @@ export default function AdminServicesView({ currentViewerRole }: AdminServicesVi
               </div>
 
               <TextArea 
-                label="Descripción"
+                label="Descripción Detallada"
+                placeholder="Describe el servicio, qué incluye, etc."
                 value={editingService.description || ''} 
                 onChange={e => setEditingService({...editingService, description: e.target.value})} 
               />
               
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+              <div className={styles.formGrid}>
                 <Input 
                   label="Precio ($)" 
                   type="number" 
@@ -275,22 +375,21 @@ export default function AdminServicesView({ currentViewerRole }: AdminServicesVi
               </div>
 
               <SelectInput
-                label="Categoría"
+                label="Categoría del Servicio"
                 options={categoryOptions}
                 value={editingService.category || 'Cabello'}
                 onChange={e => setEditingService({...editingService, category: e.target.value})}
               />
-
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem', marginTop: '1rem' }}>
-                <Button variant="secondary" onClick={() => setIsModalOpen(false)} disabled={saving}>
-                  Cancelar
-                </Button>
-                <Button variant="primary" onClick={handleSave} disabled={saving}>
-                  {saving ? 'Guardando...' : 'Guardar Servicio'}
-                </Button>
-              </div>
             </div>
 
+            <div className={styles.modalFooter}>
+              <Button variant="secondary" onClick={() => setIsModalOpen(false)} disabled={saving}>
+                Cancelar
+              </Button>
+              <Button variant="primary" onClick={handleSave} disabled={saving}>
+                {saving ? 'Guardando...' : 'Guardar Servicio'}
+              </Button>
+            </div>
           </div>
         </div>
       )}

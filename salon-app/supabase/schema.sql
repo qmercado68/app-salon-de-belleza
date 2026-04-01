@@ -10,6 +10,7 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE TABLE public.profiles (
   id uuid REFERENCES auth.users ON DELETE CASCADE PRIMARY KEY,
   full_name text NOT NULL,
+  email text, -- Sincronizado desde auth.users
   document_id text,
   birth_date date,
   gender text CHECK (gender IN ('male', 'female', 'other')),
@@ -21,6 +22,8 @@ CREATE TABLE public.profiles (
   role text DEFAULT 'client' CHECK (role IN ('client', 'admin', 'stylist')),
   specialty text,
   avatar_url text,
+  work_start_time time DEFAULT '09:00:00',
+  work_end_time time DEFAULT '18:00:00',
   created_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL,
   updated_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL
 );
@@ -110,6 +113,42 @@ CREATE POLICY "Solo admins pueden marcar como pagado o completar"
   ON public.appointments FOR UPDATE USING (
     EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin')
   );
+
+-- ==========================================
+-- SINCRONIZACIÓN AUTOMÁTICA DE PERFILES
+-- ==========================================
+
+-- Función para manejar la creación automática de perfiles
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS TRIGGER AS $$
+DECLARE
+  v_role text := 'client';
+  v_count int;
+BEGIN
+  -- Verificar si es el primer usuario de la plataforma
+  SELECT count(*) INTO v_count FROM public.profiles;
+  
+  -- Lógica de primer usuario como administrador
+  IF v_count = 0 THEN
+    v_role := 'admin';
+  END IF;
+
+  INSERT INTO public.profiles (id, full_name, email, role)
+  VALUES (
+    new.id, 
+    COALESCE(new.raw_user_meta_data->>'full_name', 'Nuevo Usuario'), 
+    new.email, 
+    v_role
+  );
+  RETURN new;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Trigger para ejecutar la función al insertar en auth.users
+-- NOTA: Este trigger se aplica sobre el esquema auth de Supabase
+-- CREATE TRIGGER on_auth_user_created
+--   AFTER INSERT ON auth.users
+--   FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
 
 -- ==========================================
 -- TRIGGERS PARA ACTUALIZACIÓN AUTOMÁTICA
