@@ -6,7 +6,7 @@ import {
   mockCurrentUser,
   mockClients
 } from './mockData';
-import { Service, Appointment, Profile, Product, ProductSale, SaleItem, DailyReportSummary, Stylist, TimeSlot } from './types';
+import { Service, Appointment, Profile, Product, ProductSale, SaleItem, DailyReportSummary, Stylist, TimeSlot, Salon } from './types';
 import { mockProducts, mockProductSales } from './mockData';
 
 // ==========================================
@@ -14,6 +14,108 @@ import { mockProducts, mockProductSales } from './mockData';
 // ==========================================
 
 export const api = {
+  // ==========================================
+  // SALONS
+  // ==========================================
+  async getSalons(): Promise<Salon[]> {
+    if (!isSupabaseConfigured()) return [];
+
+    const { data, error } = await supabase
+      .from('salons')
+      .select('*')
+      .eq('is_active', true)
+      .order('name');
+
+    if (error) throw error;
+    return (data as any[]).map(d => ({
+      id: d.id,
+      name: d.name,
+      slug: d.slug,
+      address: d.address,
+      phone: d.phone,
+      email: d.email,
+      logoUrl: d.logo_url,
+      themeColor: d.theme_color,
+      isActive: d.is_active,
+      ownerId: d.owner_id,
+      createdAt: d.created_at,
+    })) as Salon[];
+  },
+
+  async getSalonById(id: string): Promise<Salon | null> {
+    if (!isSupabaseConfigured()) return null;
+
+    const { data, error } = await supabase
+      .from('salons')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (error) return null;
+    return {
+      id: data.id,
+      name: data.name,
+      slug: data.slug,
+      address: data.address,
+      phone: data.phone,
+      email: data.email,
+      logoUrl: data.logo_url,
+      themeColor: data.theme_color,
+      isActive: data.is_active,
+      ownerId: data.owner_id,
+      createdAt: data.created_at,
+    } as Salon;
+  },
+
+  async createSalon(salon: Omit<Salon, 'id' | 'createdAt'>): Promise<Salon> {
+    if (!isSupabaseConfigured()) throw new Error('Supabase no configurado');
+
+    const payload = {
+      name: salon.name,
+      slug: salon.slug,
+      address: salon.address,
+      phone: salon.phone,
+      email: salon.email,
+      logo_url: salon.logoUrl,
+      theme_color: salon.themeColor ?? '#ec4899',
+      is_active: salon.isActive ?? true,
+      owner_id: salon.ownerId,
+    };
+
+    const { data, error } = await supabase.from('salons').insert(payload).select().single();
+    if (error) throw error;
+    return {
+      id: data.id,
+      name: data.name,
+      slug: data.slug,
+      address: data.address,
+      phone: data.phone,
+      email: data.email,
+      logoUrl: data.logo_url,
+      themeColor: data.theme_color,
+      isActive: data.is_active,
+      ownerId: data.owner_id,
+      createdAt: data.created_at,
+    } as Salon;
+  },
+
+  async updateSalon(id: string, salon: Partial<Salon>): Promise<void> {
+    if (!isSupabaseConfigured()) throw new Error('Supabase no configurado');
+
+    const payload: any = {};
+    if (salon.name !== undefined) payload.name = salon.name;
+    if (salon.slug !== undefined) payload.slug = salon.slug;
+    if (salon.address !== undefined) payload.address = salon.address;
+    if (salon.phone !== undefined) payload.phone = salon.phone;
+    if (salon.email !== undefined) payload.email = salon.email;
+    if (salon.logoUrl !== undefined) payload.logo_url = salon.logoUrl;
+    if (salon.themeColor !== undefined) payload.theme_color = salon.themeColor;
+    if (salon.isActive !== undefined) payload.is_active = salon.isActive;
+
+    const { error } = await supabase.from('salons').update(payload).eq('id', id);
+    if (error) throw error;
+  },
+
   // SALON ID HELPER
   async getSalonId(userId: string): Promise<string | null> {
     if (!isSupabaseConfigured()) return null;
@@ -55,9 +157,14 @@ export const api = {
     })) as Service[];
   },
 
-  async createService(service: Partial<Service>): Promise<Service> {
+  async createService(service: Partial<Service>, userId?: string): Promise<Service> {
     if (!isSupabaseConfigured()) throw new Error('Mock no soportado en creación admin.');
-    
+
+    let salonId = service.salonId;
+    if (!salonId && userId) {
+      salonId = (await api.getSalonId(userId)) ?? undefined;
+    }
+
     const payload = {
       name: service.name,
       description: service.description,
@@ -66,6 +173,7 @@ export const api = {
       category: service.category,
       image_url: service.imageUrl,
       is_active: service.isActive ?? true,
+      salon_id: salonId ?? null,
     };
 
     const { data, error } = await supabase.from('services').insert(payload).select().single();
@@ -457,13 +565,17 @@ export const api = {
   },
 
   // PRODUCTS & INVENTORY
-  async getProducts(): Promise<Product[]> {
+  async getProducts(userId?: string): Promise<Product[]> {
     if (!isSupabaseConfigured()) return mockProducts;
 
-    const { data, error } = await supabase
-      .from('products')
-      .select('*')
-      .order('name');
+    let query = supabase.from('products').select('*').order('name');
+
+    if (userId) {
+      const salonId = await api.getSalonId(userId);
+      if (salonId) query = query.eq('salon_id', salonId);
+    }
+
+    const { data, error } = await query;
     
     if (error) throw error;
     return (data as any[]).map(d => ({
@@ -499,7 +611,7 @@ export const api = {
     if (error) throw error;
   },
 
-  async createProduct(product: Partial<Product>): Promise<Product> {
+  async createProduct(product: Partial<Product>, userId?: string): Promise<Product> {
     if (!isSupabaseConfigured()) {
       const newProd = {
         ...product,
@@ -508,6 +620,11 @@ export const api = {
       } as Product;
       mockProducts.push(newProd);
       return newProd;
+    }
+
+    let salonId: string | null = null;
+    if (userId) {
+      salonId = await api.getSalonId(userId);
     }
 
     const payload = {
@@ -525,6 +642,7 @@ export const api = {
       supplier_name: product.supplierName,
       supplier_phone: product.supplierPhone,
       last_arrival: product.lastArrival,
+      salon_id: salonId,
     };
 
     const { data, error } = await supabase.from('products').insert(payload).select().single();
@@ -569,10 +687,15 @@ export const api = {
   },
 
   // POS / SALES
-  async processSale(sale: Omit<ProductSale, 'id' | 'saleDate'>): Promise<string> {
+  async processSale(sale: Omit<ProductSale, 'id' | 'saleDate'>, userId?: string): Promise<string> {
     if (!isSupabaseConfigured()) {
       console.log('Mock: Venta procesada', sale);
       return 'mock-sale-' + Date.now();
+    }
+
+    let salonId: string | null = null;
+    if (userId) {
+      salonId = await api.getSalonId(userId);
     }
 
     // Usar la función RPC 'process_sale' definida en el esquema SQL
@@ -580,6 +703,7 @@ export const api = {
       p_client_id: sale.clientId,
       p_seller_id: sale.sellerId,
       p_payment_method: sale.paymentMethod,
+      p_salon_id: salonId,
       p_items: sale.items.map(item => ({
         product_id: item.productId || null,
         service_id: item.serviceId || null,

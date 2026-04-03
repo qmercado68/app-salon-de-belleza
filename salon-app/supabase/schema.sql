@@ -1,10 +1,29 @@
 -- ==========================================
 -- App de Gestión para Salón de Belleza
 -- Esquema de Base de Datos (Supabase / PostgreSQL)
+-- Arquitectura Multi-Empresa (SaaS) - Opción B: clientes aislados por salón
 -- ==========================================
 
 -- Habilitar la extensión para UUIDs
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
+-- 0. TABLA RAÍZ: salons
+CREATE TABLE public.salons (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  name text NOT NULL,
+  slug text UNIQUE NOT NULL,
+  address text,
+  phone text,
+  email text,
+  logo_url text,
+  theme_color text DEFAULT '#ec4899',
+  is_active boolean DEFAULT true,
+  owner_id uuid REFERENCES auth.users(id) ON DELETE SET NULL,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now()
+);
+
+ALTER TABLE public.salons ENABLE ROW LEVEL SECURITY;
 
 -- 1. TABLA DE PERFILES (Extiende auth.users)
 CREATE TABLE public.profiles (
@@ -19,7 +38,8 @@ CREATE TABLE public.profiles (
   blood_type varchar(5) CHECK (blood_type IN ('A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-')),
   medical_conditions text,
   allergies text,
-  role text DEFAULT 'client' CHECK (role IN ('client', 'admin', 'stylist')),
+  salon_id uuid REFERENCES public.salons(id) ON DELETE SET NULL,
+  role text DEFAULT 'client' CHECK (role IN ('client', 'admin', 'stylist', 'superadmin')),
   specialty text,
   avatar_url text,
   work_start_time time DEFAULT '09:00:00',
@@ -38,6 +58,7 @@ CREATE TABLE public.services (
   category text NOT NULL,
   image_url text,
   is_active boolean DEFAULT true,
+  salon_id uuid REFERENCES public.salons(id) ON DELETE CASCADE,
   created_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
@@ -52,6 +73,7 @@ CREATE TABLE public.appointments (
   payment_method text DEFAULT 'efectivo',
   is_paid boolean DEFAULT false,
   notes text,
+  salon_id uuid REFERENCES public.salons(id) ON DELETE CASCADE,
   created_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 

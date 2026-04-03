@@ -2,7 +2,21 @@
 // Domain Types for Salon de Belleza App
 // ==========================================
 
-export type UserRole = 'client' | 'admin' | 'stylist';
+export type UserRole = 'client' | 'admin' | 'stylist' | 'superadmin';
+
+export interface Salon {
+  id: string;
+  name: string;
+  slug: string;
+  address?: string;
+  phone?: string;
+  email?: string;
+  logoUrl?: string;
+  themeColor?: string;
+  isActive?: boolean;
+  ownerId?: string;
+  createdAt?: string;
+}
 
 export type BloodType = 'A+' | 'A-' | 'B+' | 'B-' | 'AB+' | 'AB-' | 'O+' | 'O-';
 
