@@ -21,6 +21,7 @@ CREATE TABLE IF NOT EXISTS public.salons (
   updated_at timestamp with time zone DEFAULT now()
 );
 
+DROP TRIGGER IF EXISTS set_updated_at_salons ON public.salons;
 CREATE TRIGGER set_updated_at_salons
   BEFORE UPDATE ON public.salons
   FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
@@ -74,16 +75,19 @@ $$ LANGUAGE sql STABLE SECURITY DEFINER;
 -- ----------------------------------------
 
 -- Cualquiera puede ver salones activos (para la página de selección)
+DROP POLICY IF EXISTS "salons_public_read" ON public.salons;
 CREATE POLICY "salons_public_read"
   ON public.salons FOR SELECT USING (is_active = true);
 
 -- Solo superadmin puede crear/editar/eliminar salones
+DROP POLICY IF EXISTS "salons_superadmin_all" ON public.salons;
 CREATE POLICY "salons_superadmin_all"
   ON public.salons FOR ALL USING (
     public.get_my_role() = 'superadmin'
   );
 
 -- El propietario puede actualizar su propio salón
+DROP POLICY IF EXISTS "salons_owner_update" ON public.salons;
 CREATE POLICY "salons_owner_update"
   ON public.salons FOR UPDATE USING (
     owner_id = auth.uid()
@@ -100,24 +104,28 @@ DROP POLICY IF EXISTS "Los administradores pueden ver todos los perfiles" ON pub
 DROP POLICY IF EXISTS "Los administradores pueden actualizar cualquier perfil" ON public.profiles;
 
 -- Superadmin ve todo
+DROP POLICY IF EXISTS "profiles_superadmin_all" ON public.profiles;
 CREATE POLICY "profiles_superadmin_all"
   ON public.profiles FOR ALL USING (
     public.get_my_role() = 'superadmin'
   );
 
 -- Usuario ve su propio perfil
+DROP POLICY IF EXISTS "profiles_own_select" ON public.profiles;
 CREATE POLICY "profiles_own_select"
   ON public.profiles FOR SELECT USING (
     id = auth.uid()
   );
 
 -- Usuario actualiza su propio perfil
+DROP POLICY IF EXISTS "profiles_own_update" ON public.profiles;
 CREATE POLICY "profiles_own_update"
   ON public.profiles FOR UPDATE USING (
     id = auth.uid()
   );
 
 -- Admin/estilista del mismo salón ven todos los perfiles de ese salón
+DROP POLICY IF EXISTS "profiles_same_salon_staff_select" ON public.profiles;
 CREATE POLICY "profiles_same_salon_staff_select"
   ON public.profiles FOR SELECT USING (
     salon_id = public.get_my_salon_id()
@@ -125,6 +133,7 @@ CREATE POLICY "profiles_same_salon_staff_select"
   );
 
 -- Admin del mismo salón puede actualizar perfiles del salón
+DROP POLICY IF EXISTS "profiles_same_salon_admin_update" ON public.profiles;
 CREATE POLICY "profiles_same_salon_admin_update"
   ON public.profiles FOR UPDATE USING (
     salon_id = public.get_my_salon_id()
@@ -132,6 +141,7 @@ CREATE POLICY "profiles_same_salon_admin_update"
   );
 
 -- Permitir INSERT de nuevos perfiles (trigger de auto-registro)
+DROP POLICY IF EXISTS "profiles_insert_own" ON public.profiles;
 CREATE POLICY "profiles_insert_own"
   ON public.profiles FOR INSERT WITH CHECK (
     id = auth.uid()
@@ -145,12 +155,14 @@ DROP POLICY IF EXISTS "Cualquiera puede ver los servicios activos" ON public.ser
 DROP POLICY IF EXISTS "Solo administradores pueden gestionar servicios" ON public.services;
 
 -- Superadmin ve todo
+DROP POLICY IF EXISTS "services_superadmin_all" ON public.services;
 CREATE POLICY "services_superadmin_all"
   ON public.services FOR ALL USING (
     public.get_my_role() = 'superadmin'
   );
 
 -- Usuarios del mismo salón ven los servicios activos de ese salón
+DROP POLICY IF EXISTS "services_same_salon_select" ON public.services;
 CREATE POLICY "services_same_salon_select"
   ON public.services FOR SELECT USING (
     salon_id = public.get_my_salon_id()
@@ -158,6 +170,7 @@ CREATE POLICY "services_same_salon_select"
   );
 
 -- Admin del mismo salón gestiona servicios
+DROP POLICY IF EXISTS "services_same_salon_admin_all" ON public.services;
 CREATE POLICY "services_same_salon_admin_all"
   ON public.services FOR ALL USING (
     salon_id = public.get_my_salon_id()
@@ -175,12 +188,14 @@ DROP POLICY IF EXISTS "Admins y estilistas pueden ver todas las citas" ON public
 DROP POLICY IF EXISTS "Solo admins pueden marcar como pagado o completar" ON public.appointments;
 
 -- Superadmin ve todo
+DROP POLICY IF EXISTS "appointments_superadmin_all" ON public.appointments;
 CREATE POLICY "appointments_superadmin_all"
   ON public.appointments FOR ALL USING (
     public.get_my_role() = 'superadmin'
   );
 
 -- Cliente ve sus propias citas dentro de su salón
+DROP POLICY IF EXISTS "appointments_client_select" ON public.appointments;
 CREATE POLICY "appointments_client_select"
   ON public.appointments FOR SELECT USING (
     client_id = auth.uid()
@@ -188,6 +203,7 @@ CREATE POLICY "appointments_client_select"
   );
 
 -- Cliente puede crear citas en su salón
+DROP POLICY IF EXISTS "appointments_client_insert" ON public.appointments;
 CREATE POLICY "appointments_client_insert"
   ON public.appointments FOR INSERT WITH CHECK (
     client_id = auth.uid()
@@ -195,6 +211,7 @@ CREATE POLICY "appointments_client_insert"
   );
 
 -- Cliente puede cancelar sus citas pendientes con > 24h de anticipación
+DROP POLICY IF EXISTS "appointments_client_cancel" ON public.appointments;
 CREATE POLICY "appointments_client_cancel"
   ON public.appointments FOR UPDATE USING (
     client_id = auth.uid()
@@ -204,6 +221,7 @@ CREATE POLICY "appointments_client_cancel"
   );
 
 -- Staff (admin/estilista) ve todas las citas de su salón
+DROP POLICY IF EXISTS "appointments_staff_select" ON public.appointments;
 CREATE POLICY "appointments_staff_select"
   ON public.appointments FOR SELECT USING (
     salon_id = public.get_my_salon_id()
@@ -211,6 +229,7 @@ CREATE POLICY "appointments_staff_select"
   );
 
 -- Admin gestiona todas las citas de su salón
+DROP POLICY IF EXISTS "appointments_admin_all" ON public.appointments;
 CREATE POLICY "appointments_admin_all"
   ON public.appointments FOR ALL USING (
     salon_id = public.get_my_salon_id()
@@ -224,17 +243,20 @@ CREATE POLICY "appointments_admin_all"
 DROP POLICY IF EXISTS "Cualquiera puede ver productos activos con stock" ON public.products;
 DROP POLICY IF EXISTS "Administradores pueden gestionar todo el inventario" ON public.products;
 
+DROP POLICY IF EXISTS "products_superadmin_all" ON public.products;
 CREATE POLICY "products_superadmin_all"
   ON public.products FOR ALL USING (
     public.get_my_role() = 'superadmin'
   );
 
+DROP POLICY IF EXISTS "products_same_salon_select" ON public.products;
 CREATE POLICY "products_same_salon_select"
   ON public.products FOR SELECT USING (
     salon_id = public.get_my_salon_id()
     AND is_active = true
   );
 
+DROP POLICY IF EXISTS "products_same_salon_admin_all" ON public.products;
 CREATE POLICY "products_same_salon_admin_all"
   ON public.products FOR ALL USING (
     salon_id = public.get_my_salon_id()
@@ -249,23 +271,27 @@ DROP POLICY IF EXISTS "Cualquiera puede ver sus compras" ON public.product_sales
 DROP POLICY IF EXISTS "Vendedores/Admins pueden ver todas las ventas" ON public.product_sales;
 DROP POLICY IF EXISTS "Solo administradores y cajeros insertan ventas" ON public.product_sales;
 
+DROP POLICY IF EXISTS "product_sales_superadmin_all" ON public.product_sales;
 CREATE POLICY "product_sales_superadmin_all"
   ON public.product_sales FOR ALL USING (
     public.get_my_role() = 'superadmin'
   );
 
+DROP POLICY IF EXISTS "product_sales_client_own" ON public.product_sales;
 CREATE POLICY "product_sales_client_own"
   ON public.product_sales FOR SELECT USING (
     client_id = auth.uid()
     AND salon_id = public.get_my_salon_id()
   );
 
+DROP POLICY IF EXISTS "product_sales_staff_select" ON public.product_sales;
 CREATE POLICY "product_sales_staff_select"
   ON public.product_sales FOR SELECT USING (
     salon_id = public.get_my_salon_id()
     AND public.get_my_role() IN ('admin', 'stylist')
   );
 
+DROP POLICY IF EXISTS "product_sales_staff_insert" ON public.product_sales;
 CREATE POLICY "product_sales_staff_insert"
   ON public.product_sales FOR INSERT WITH CHECK (
     salon_id = public.get_my_salon_id()

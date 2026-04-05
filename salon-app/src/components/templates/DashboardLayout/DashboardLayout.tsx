@@ -13,6 +13,7 @@ interface DashboardLayoutProps {
   pageSubtitle?: string;
   userName: string;
   userRole?: string;
+  salonName?: string | null;
 }
 
 export default function DashboardLayout({
@@ -23,6 +24,7 @@ export default function DashboardLayout({
   pageSubtitle,
   userName,
   userRole = 'client',
+  salonName,
 }: DashboardLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
@@ -36,6 +38,7 @@ export default function DashboardLayout({
         }}
         userName={userName}
         userRole={userRole}
+        salonName={salonName}
         isOpen={sidebarOpen}
         onToggle={() => setSidebarOpen(false)}
       />

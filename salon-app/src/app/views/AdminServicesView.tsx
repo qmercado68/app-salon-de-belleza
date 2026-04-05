@@ -12,14 +12,17 @@ import Badge from '@/components/atoms/Badge/Badge';
 import Button from '@/components/atoms/Button/Button';
 import Input, { SelectInput, TextArea } from '@/components/atoms/Input/Input';
 import { api } from '@/lib/api';
-import { Service } from '@/lib/types';
+import { Service, Salon } from '@/lib/types';
 
 interface AdminServicesViewProps {
   currentViewerRole?: string;
+  userId?: string;
 }
 
-export default function AdminServicesView({ currentViewerRole }: AdminServicesViewProps) {
+export default function AdminServicesView({ currentViewerRole, userId }: AdminServicesViewProps) {
   const [services, setServices] = useState<Service[]>([]);
+  const [salons, setSalons] = useState<Salon[]>([]);
+  const [salonsMap, setSalonsMap] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   
@@ -41,8 +44,15 @@ export default function AdminServicesView({ currentViewerRole }: AdminServicesVi
   const fetchServices = async () => {
     try {
       setLoading(true);
-      const data = await api.getServices();
+      const [data, salonsList] = await Promise.all([
+        api.getServices(userId),
+        api.getSalons(),
+      ]);
       setServices(data);
+      setSalons(salonsList);
+      const map: Record<string, string> = {};
+      salonsList.forEach(s => { map[s.id] = s.name; });
+      setSalonsMap(map);
     } catch (err: any) {
       setError(`Error al cargar catálogo: ${err?.message ?? 'Desconocido'}`);
     } finally {
@@ -51,7 +61,7 @@ export default function AdminServicesView({ currentViewerRole }: AdminServicesVi
   };
 
   useEffect(() => {
-    if (currentViewerRole === 'admin') {
+    if (currentViewerRole === 'admin' || currentViewerRole === 'superadmin') {
       fetchServices();
     }
   }, [currentViewerRole]);
@@ -121,7 +131,7 @@ export default function AdminServicesView({ currentViewerRole }: AdminServicesVi
       if (payload.id) {
         await api.updateService(payload.id, payload);
       } else {
-        await api.createService(payload);
+        await api.createService(payload, userId);
       }
       
       await fetchServices();
@@ -139,7 +149,7 @@ export default function AdminServicesView({ currentViewerRole }: AdminServicesVi
     }
   };
 
-  if (currentViewerRole !== 'admin') {
+  if (currentViewerRole !== 'admin' && currentViewerRole !== 'superadmin') {
     return (
       <div className={styles.restricted}>
         <ShieldAlert size={64} className={styles.restrictedIcon} />
@@ -211,6 +221,7 @@ export default function AdminServicesView({ currentViewerRole }: AdminServicesVi
               <tr>
                 <th>Servicio</th>
                 <th>Categoría</th>
+                <th>Salón</th>
                 <th>Precio / Duración</th>
                 <th>Estado</th>
                 <th>Acciones</th>
@@ -242,6 +253,11 @@ export default function AdminServicesView({ currentViewerRole }: AdminServicesVi
                     }>
                       {s.category}
                     </Badge>
+                  </td>
+                  <td>
+                    <span style={{ fontSize: '0.8rem', color: s.salonId ? 'var(--neutral-700)' : 'var(--neutral-400)' }}>
+                      {s.salonId ? (salonsMap[s.salonId] || 'Desconocido') : 'Sin asignar'}
+                    </span>
                   </td>
                   <td>
                     <div className={styles.priceWrapper}>
@@ -293,7 +309,7 @@ export default function AdminServicesView({ currentViewerRole }: AdminServicesVi
               ))}
               {filteredServices.length === 0 && (
                 <tr>
-                  <td colSpan={5} style={{ textAlign: 'center', padding: '4rem' }}>
+                  <td colSpan={6} style={{ textAlign: 'center', padding: '4rem' }}>
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem', color: 'var(--neutral-400)' }}>
                       <Search size={48} />
                       <p>No se encontraron servicios con los filtros actuales.</p>
@@ -379,6 +395,16 @@ export default function AdminServicesView({ currentViewerRole }: AdminServicesVi
                 options={categoryOptions}
                 value={editingService.category || 'Cabello'}
                 onChange={e => setEditingService({...editingService, category: e.target.value})}
+              />
+
+              <SelectInput
+                label="Salón"
+                options={[
+                  { value: '', label: 'Sin asignar' },
+                  ...salons.map(s => ({ value: s.id, label: s.name })),
+                ]}
+                value={editingService.salonId || ''}
+                onChange={e => setEditingService({...editingService, salonId: e.target.value})}
               />
             </div>
 

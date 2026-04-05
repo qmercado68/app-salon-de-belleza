@@ -6,7 +6,7 @@ import {
   mockCurrentUser,
   mockClients
 } from './mockData';
-import { Service, Appointment, Profile, Product, ProductSale, SaleItem, DailyReportSummary, Stylist, TimeSlot, Salon } from './types';
+import { Service, Appointment, Profile, Product, ProductSale, SaleItem, DailyReportSummary, Stylist, TimeSlot, Salon, Tercero } from './types';
 import { mockProducts, mockProductSales } from './mockData';
 
 // ==========================================
@@ -154,6 +154,7 @@ export const api = {
       category: d.category,
       imageUrl: d.image_url,
       isActive: d.is_active,
+      salonId: d.salon_id,
     })) as Service[];
   },
 
@@ -201,6 +202,7 @@ export const api = {
     if (service.category !== undefined) payload.category = service.category;
     if (service.imageUrl !== undefined) payload.image_url = service.imageUrl;
     if (service.isActive !== undefined) payload.is_active = service.isActive;
+    if (service.salonId !== undefined) payload.salon_id = service.salonId || null;
 
     const { error } = await supabase.from('services').update(payload).eq('id', id);
     if (error) throw error;
@@ -568,7 +570,7 @@ export const api = {
   async getProducts(userId?: string): Promise<Product[]> {
     if (!isSupabaseConfigured()) return mockProducts;
 
-    let query = supabase.from('products').select('*').order('name');
+    let query = supabase.from('products').select('*, terceros(id, nit, nombre)').order('name');
 
     if (userId) {
       const salonId = await api.getSalonId(userId);
@@ -594,20 +596,35 @@ export const api = {
       supplierName: d.supplier_name,
       supplierPhone: d.supplier_phone,
       lastArrival: d.last_arrival,
+      costPrice: d.cost_price,
+      purchaseDate: d.purchase_date,
+      salonId: d.salon_id,
+      terceroId: d.tercero_id,
+      terceroNombre: d.terceros?.nombre,
+      terceroNit: d.terceros?.nit,
     })) as Product[];
   },
 
-  async updateProductStock(id: string, newStock: number): Promise<void> {
+  async updateProductStock(
+    id: string,
+    newStock: number,
+    options?: { price?: number; costPrice?: number; lastArrival?: string }
+  ): Promise<void> {
     if (!isSupabaseConfigured()) {
       console.log(`Mock: Stock de producto ${id} actualizado a ${newStock}`);
       return;
     }
 
+    const update: any = { stock: newStock, updated_at: new Date().toISOString() };
+    if (options?.price !== undefined) update.price = options.price;
+    if (options?.costPrice !== undefined) update.cost_price = options.costPrice;
+    if (options?.lastArrival) update.last_arrival = options.lastArrival;
+
     const { error } = await supabase
       .from('products')
-      .update({ stock: newStock, updated_at: new Date().toISOString() })
+      .update(update)
       .eq('id', id);
-    
+
     if (error) throw error;
   },
 
@@ -642,6 +659,9 @@ export const api = {
       supplier_name: product.supplierName,
       supplier_phone: product.supplierPhone,
       last_arrival: product.lastArrival,
+      cost_price: product.costPrice,
+      purchase_date: product.purchaseDate,
+      tercero_id: product.terceroId || null,
       salon_id: salonId,
     };
 
@@ -681,6 +701,10 @@ export const api = {
     if (product.supplierName !== undefined) payload.supplier_name = product.supplierName;
     if (product.supplierPhone !== undefined) payload.supplier_phone = product.supplierPhone;
     if (product.lastArrival !== undefined) payload.last_arrival = product.lastArrival;
+    if (product.costPrice !== undefined) payload.cost_price = product.costPrice;
+    if (product.purchaseDate !== undefined) payload.purchase_date = product.purchaseDate || null;
+    if (product.salonId !== undefined) payload.salon_id = product.salonId || null;
+    if (product.terceroId !== undefined) payload.tercero_id = product.terceroId || null;
 
     const { error } = await supabase.from('products').update(payload).eq('id', id);
     if (error) throw error;
@@ -851,5 +875,80 @@ export const api = {
     });
 
     return transactions.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  }
+  },
+
+  // ==========================================
+  // TERCEROS
+  // ==========================================
+  async getTerceros(): Promise<Tercero[]> {
+    if (!isSupabaseConfigured()) return [];
+
+    const { data, error } = await supabase
+      .from('terceros')
+      .select('*')
+      .eq('is_active', true)
+      .order('nombre');
+
+    if (error) throw error;
+    return (data as any[]).map(d => ({
+      id: d.id,
+      nit: d.nit,
+      nombre: d.nombre,
+      direccion: d.direccion,
+      telefono: d.telefono,
+      departamento: d.departamento,
+      ciudad: d.ciudad,
+      isActive: d.is_active,
+      createdAt: d.created_at,
+    })) as Tercero[];
+  },
+
+  async createTercero(tercero: Partial<Tercero>): Promise<Tercero> {
+    if (!isSupabaseConfigured()) throw new Error('Supabase no configurado');
+
+    const payload = {
+      nit: tercero.nit,
+      nombre: tercero.nombre,
+      direccion: tercero.direccion || null,
+      telefono: tercero.telefono || null,
+      departamento: tercero.departamento || null,
+      ciudad: tercero.ciudad || null,
+    };
+
+    const { data, error } = await supabase.from('terceros').insert(payload).select().single();
+    if (error) throw error;
+    return {
+      id: data.id,
+      nit: data.nit,
+      nombre: data.nombre,
+      direccion: data.direccion,
+      telefono: data.telefono,
+      departamento: data.departamento,
+      ciudad: data.ciudad,
+      isActive: data.is_active,
+      createdAt: data.created_at,
+    } as Tercero;
+  },
+
+  async updateTercero(id: string, tercero: Partial<Tercero>): Promise<void> {
+    if (!isSupabaseConfigured()) throw new Error('Supabase no configurado');
+
+    const payload: any = {};
+    if (tercero.nit !== undefined) payload.nit = tercero.nit;
+    if (tercero.nombre !== undefined) payload.nombre = tercero.nombre;
+    if (tercero.direccion !== undefined) payload.direccion = tercero.direccion || null;
+    if (tercero.telefono !== undefined) payload.telefono = tercero.telefono || null;
+    if (tercero.departamento !== undefined) payload.departamento = tercero.departamento || null;
+    if (tercero.ciudad !== undefined) payload.ciudad = tercero.ciudad || null;
+
+    const { error } = await supabase.from('terceros').update(payload).eq('id', id);
+    if (error) throw error;
+  },
+
+  async deleteTercero(id: string): Promise<void> {
+    if (!isSupabaseConfigured()) throw new Error('Supabase no configurado');
+
+    const { error } = await supabase.from('terceros').update({ is_active: false }).eq('id', id);
+    if (error) throw error;
+  },
 };

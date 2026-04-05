@@ -83,6 +83,25 @@ export interface Product {
   supplierName?: string;
   supplierPhone?: string;
   lastArrival?: string;
+  costPrice?: number;
+  purchaseDate?: string;
+  salonId?: string;
+  terceroId?: string;
+  terceroNombre?: string;
+  terceroNit?: string;
+}
+
+export interface Tercero {
+  id: string;
+  nit: string;
+  nombre: string;
+  direccion?: string;
+  telefono?: string;
+  departamento?: string;
+  ciudad?: string;
+  salonId?: string;
+  isActive?: boolean;
+  createdAt?: string;
 }
 
 export interface SaleItem {

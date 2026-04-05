@@ -9,7 +9,7 @@ import Button from '@/components/atoms/Button/Button';
 import Avatar from '@/components/atoms/Avatar/Avatar';
 import Input from '@/components/atoms/Input/Input';
 import { api } from '@/lib/api';
-import { Profile } from '@/lib/types';
+import { Profile, Salon } from '@/lib/types';
 import ProfileView from './ProfileView';
 
 interface UsersViewProps {
@@ -18,6 +18,7 @@ interface UsersViewProps {
 
 export default function UsersView({ currentViewerRole }: UsersViewProps) {
   const [users, setUsers] = useState<Profile[]>([]);
+  const [salonsMap, setSalonsMap] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -27,8 +28,14 @@ export default function UsersView({ currentViewerRole }: UsersViewProps) {
     try {
       setLoading(true);
       setError(null);
-      const data = await api.getAllProfiles();
+      const [data, salons] = await Promise.all([
+        api.getAllProfiles(),
+        api.getSalons(),
+      ]);
       setUsers(data);
+      const map: Record<string, string> = {};
+      salons.forEach(s => { map[s.id] = s.name; });
+      setSalonsMap(map);
     } catch (err: any) {
       console.error('Error al cargar usuarios:', err);
       setError(`Error al obtener directorio: ${err?.message ?? 'Desconocido'}`);
@@ -83,7 +90,7 @@ export default function UsersView({ currentViewerRole }: UsersViewProps) {
     return <div className={styles.page || ''}><p style={{ color: 'var(--color-danger)' }}>{error}</p></div>;
   }
 
-  if (currentViewerRole !== 'admin') {
+  if (currentViewerRole !== 'admin' && currentViewerRole !== 'superadmin') {
     return (
       <div className={styles.page || ''} style={{ textAlign: 'center', padding: '3rem' }}>
         <ShieldAlert size={48} style={{ margin: '0 auto', color: 'var(--color-warning)' }} />
@@ -127,6 +134,7 @@ export default function UsersView({ currentViewerRole }: UsersViewProps) {
               <tr style={{ borderBottom: '2px solid var(--color-border)', backgroundColor: 'var(--color-background)' }}>
                 <th style={{ padding: '1rem', fontWeight: 600, fontSize: '0.875rem' }}>Usuario</th>
                 <th style={{ padding: '1rem', fontWeight: 600, fontSize: '0.875rem' }}>Contacto</th>
+                <th style={{ padding: '1rem', fontWeight: 600, fontSize: '0.875rem' }}>Salón</th>
                 <th style={{ padding: '1rem', fontWeight: 600, fontSize: '0.875rem' }}>Rol</th>
                 <th style={{ padding: '1rem', fontWeight: 600, fontSize: '0.875rem' }}>Acciones</th>
               </tr>
@@ -134,7 +142,7 @@ export default function UsersView({ currentViewerRole }: UsersViewProps) {
             <tbody>
               {filteredUsers.length === 0 ? (
                 <tr>
-                  <td colSpan={4} style={{ textAlign: 'center', padding: '2rem', color: 'var(--color-text-light)' }}>
+                  <td colSpan={5} style={{ textAlign: 'center', padding: '2rem', color: 'var(--color-text-light)' }}>
                     No se encontraron usuarios.
                   </td>
                 </tr>
@@ -160,8 +168,13 @@ export default function UsersView({ currentViewerRole }: UsersViewProps) {
                       <div style={{ fontSize: '0.8rem', color: 'var(--color-text-light)' }}>{u.email}</div>
                     </td>
                     <td style={{ padding: '1rem' }}>
-                      <Badge variant={u.role === 'admin' ? 'confirmada' : u.role === 'stylist' ? 'info' : 'pendiente'}>
-                        {u.role === 'admin' ? 'Administrador' : u.role === 'stylist' ? 'Estilista' : 'Cliente'}
+                      <span style={{ fontSize: '0.875rem', color: u.salonId ? 'var(--color-text)' : 'var(--color-text-light)' }}>
+                        {u.salonId ? (salonsMap[u.salonId] || 'Desconocido') : u.role === 'superadmin' ? 'Global' : 'Sin asignar'}
+                      </span>
+                    </td>
+                    <td style={{ padding: '1rem' }}>
+                      <Badge variant={u.role === 'superadmin' ? 'completada' : u.role === 'admin' ? 'confirmada' : u.role === 'stylist' ? 'info' : 'pendiente'}>
+                        {u.role === 'superadmin' ? 'Super Admin' : u.role === 'admin' ? 'Administrador' : u.role === 'stylist' ? 'Estilista' : 'Cliente'}
                       </Badge>
                       {u.specialty && <div style={{ fontSize: '0.75rem', marginTop: '4px' }}>{u.specialty}</div>}
                     </td>

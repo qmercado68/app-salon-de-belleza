@@ -14,12 +14,14 @@ import InventoryView from './views/InventoryView';
 import UsersView from './views/UsersView';
 import AdminServicesView from './views/AdminServicesView';
 import POSView from './views/POSView';
+import SalonesView from './views/SalonesView';
+import TercerosView from './views/TercerosView';
 import LoginView from './views/LoginView';
 import { supabase } from '@/lib/supabase';
 import { api } from '@/lib/api';
 import { Profile } from '@/lib/types';
 
-type ViewId = 'login' | 'dashboard' | 'services' | 'appointments' | 'book' | 'profile' | 'admin' | 'reports' | 'sales' | 'inventory' | 'users' | 'admin-services' | 'pos';
+type ViewId = 'login' | 'dashboard' | 'services' | 'appointments' | 'book' | 'profile' | 'admin' | 'reports' | 'sales' | 'inventory' | 'users' | 'admin-services' | 'pos' | 'salones' | 'terceros';
 
 const pageTitles: Record<ViewId, { title: string; subtitle?: string }> = {
   login: { title: 'Iniciar Sesión' },
@@ -35,12 +37,15 @@ const pageTitles: Record<ViewId, { title: string; subtitle?: string }> = {
   users: { title: 'Directorio de Usuarios', subtitle: 'Gestión completa de clientes, administradores y staff' },
   'admin-services': { title: 'Gestión de Catálogo', subtitle: 'Administra tus servicios, precios e imágenes' },
   pos: { title: 'Punto de Venta', subtitle: 'Venta rápida de productos y cobro a clientes' },
+  salones: { title: 'Gestión de Salones', subtitle: 'Administra las empresas registradas en la plataforma' },
+  terceros: { title: 'Terceros', subtitle: 'Proveedores, clientes y contactos externos' },
 };
 
 export default function HomePage() {
   const [currentView, setCurrentView] = useState<ViewId>('login');
   const [user, setUser] = useState<any>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
+  const [salonName, setSalonName] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   React.useEffect(() => {
@@ -65,6 +70,10 @@ export default function HomePage() {
           
           if (userProfile) {
             setProfile(userProfile);
+            if (userProfile.salonId) {
+              const salon = await api.getSalonById(userProfile.salonId);
+              if (salon) setSalonName(salon.name);
+            }
           } else {
             // Fallback: obtener al menos el rol vía RPC para mostrar el menú correcto
             console.warn("Perfil no cargado, intentando obtener rol vía RPC...");
@@ -162,23 +171,27 @@ export default function HomePage() {
       case 'appointments':
         return <AppointmentsView userId={userId} role={userRole} />;
       case 'book':
-        return <BookView onSuccess={() => setCurrentView('appointments')} userId={userId} />;
+        return <BookView onSuccess={() => setCurrentView('appointments')} userId={userId} userRole={userRole} />;
       case 'profile':
         return <ProfileView userId={userId ?? ''} userEmail={user?.email ?? undefined} initialProfile={profile ?? undefined} />;
       case 'admin':
         return <AdminView userId={userId} />;
       case 'reports':
-        return <ReportsView />;
+        return <ReportsView userId={userId} />;
       case 'sales':
-        return <SalesView />;
+        return <SalesView userId={userId} />;
       case 'inventory':
-        return <InventoryView />;
+        return <InventoryView userId={userId} />;
       case 'users':
         return <UsersView currentViewerRole={userRole} />;
       case 'admin-services':
-        return <AdminServicesView currentViewerRole={userRole} />;
+        return <AdminServicesView currentViewerRole={userRole} userId={userId} />;
       case 'pos':
         return <POSView userId={userId} />;
+      case 'salones':
+        return <SalonesView />;
+      case 'terceros':
+        return <TercerosView userId={userId} />;
       default:
         return <DashboardView onNavigate={setCurrentView} userId={userId} />;
     }
@@ -192,6 +205,7 @@ export default function HomePage() {
       pageSubtitle={pageInfo.subtitle}
       userName={profile?.fullName || user.email || 'Usuario'}
       userRole={profile?.role || 'client'}
+      salonName={salonName}
     >
       {renderView()}
     </DashboardLayout>

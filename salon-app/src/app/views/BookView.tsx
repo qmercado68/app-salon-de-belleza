@@ -7,34 +7,67 @@ import Avatar from '@/components/atoms/Avatar/Avatar';
 import Input from '@/components/atoms/Input/Input';
 import { generateTimeSlots } from '@/lib/mockData';
 import { api } from '@/lib/api';
-import { Service, Stylist } from '@/lib/types';
+import { Service, Stylist, Profile } from '@/lib/types';
 
 interface BookViewProps {
   onSuccess: () => void;
   userId?: string;
+  userRole?: string;
 }
 
-type Step = 'service' | 'stylist' | 'datetime' | 'confirm';
+type Step = 'client' | 'service' | 'stylist' | 'datetime' | 'confirm';
 
 const categoryIcons: Record<string, string> = {
   'Cabello': '💇‍♀️', 'Uñas': '💅', 'Facial': '🧖‍♀️',
   'Cuerpo': '✨', 'Maquillaje': '💄',
 };
 
-export default function BookView({ onSuccess, userId }: BookViewProps) {
-  const [step, setStep] = useState<Step>('service');
+export default function BookView({ onSuccess, userId, userRole }: BookViewProps) {
+  const isStaff = userRole === 'admin' || userRole === 'superadmin';
+  const [step, setStep] = useState<Step>(isStaff ? 'client' : 'service');
   const [selectedService, setSelectedService] = useState<Service | null>(null);
   const [selectedStylist, setSelectedStylist] = useState<Stylist | null>(null);
   const [selectedDate, setSelectedDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [selectedTime, setSelectedTime] = useState('');
   const [isBooked, setIsBooked] = useState(false);
-  
+
   const [services, setServices] = useState<Service[]>([]);
   const [loadingServices, setLoadingServices] = useState(true);
-  
+
   const [stylists, setStylists] = useState<Stylist[]>([]);
   const [loadingStylists, setLoadingStylists] = useState(false);
   const [stylistQuery, setStylistQuery] = useState('');
+
+  // Client selection (admin/superadmin)
+  const [clients, setClients] = useState<Profile[]>([]);
+  const [loadingClients, setLoadingClients] = useState(false);
+  const [selectedClient, setSelectedClient] = useState<Profile | null>(null);
+  const [clientQuery, setClientQuery] = useState('');
+
+  useEffect(() => {
+    if (isStaff) {
+      const fetchClients = async () => {
+        try {
+          setLoadingClients(true);
+          const data = await api.getAllProfiles();
+          setClients(data);
+        } catch (err) {
+          console.error('Error al cargar clientes:', err);
+        } finally {
+          setLoadingClients(false);
+        }
+      };
+      fetchClients();
+    }
+  }, [isStaff]);
+
+  const filteredClients = useMemo(() => {
+    return clients.filter(c =>
+      c.fullName.toLowerCase().includes(clientQuery.toLowerCase()) ||
+      (c.phone || '').includes(clientQuery) ||
+      (c.email || '').toLowerCase().includes(clientQuery.toLowerCase())
+    );
+  }, [clients, clientQuery]);
 
   useEffect(() => {
     const fetchServices = async () => {
@@ -109,10 +142,11 @@ export default function BookView({ onSuccess, userId }: BookViewProps) {
 
   const handleConfirm = async () => {
     if (!selectedService) return;
+    const clientId = isStaff && selectedClient ? selectedClient.id : userId;
     try {
       await api.createAppointment(
         {
-          clientId: userId,
+          clientId,
           serviceId: selectedService.id,
           serviceName: selectedService.name,
           stylistId: selectedStylist?.id,
@@ -153,8 +187,13 @@ export default function BookView({ onSuccess, userId }: BookViewProps) {
     <div className={styles.page}>
       {/* Steps Indicator */}
       <div className={styles.steps}>
-        {['Servicio', 'Profesional', 'Fecha y Hora', 'Confirmar'].map((s, i) => {
-          const stepKeys: Step[] = ['service', 'stylist', 'datetime', 'confirm'];
+        {(isStaff
+          ? ['Cliente', 'Servicio', 'Profesional', 'Fecha y Hora', 'Confirmar']
+          : ['Servicio', 'Profesional', 'Fecha y Hora', 'Confirmar']
+        ).map((s, i) => {
+          const stepKeys: Step[] = isStaff
+            ? ['client', 'service', 'stylist', 'datetime', 'confirm']
+            : ['service', 'stylist', 'datetime', 'confirm'];
           const isActive = step === stepKeys[i];
           const isDone = stepKeys.indexOf(step) > i;
           return (
@@ -165,6 +204,62 @@ export default function BookView({ onSuccess, userId }: BookViewProps) {
           );
         })}
       </div>
+
+      {/* Step: Select Client (admin/superadmin only) */}
+      {step === 'client' && isStaff && (
+        <div className={styles.section}>
+          <h3 className={styles.sectionTitle}>¿Para qué cliente es la cita?</h3>
+
+          <div style={{ marginBottom: '1.5rem' }}>
+            <Input
+              icon={<Search size={18} />}
+              placeholder="Buscar por nombre, teléfono o email..."
+              value={clientQuery}
+              onChange={(e) => setClientQuery(e.target.value)}
+            />
+          </div>
+
+          {loadingClients ? (
+            <p>Cargando clientes...</p>
+          ) : (
+            <div className={styles.stylistGrid}>
+              {filteredClients.map((client) => (
+                <div
+                  key={client.id}
+                  className={`${styles.stylistCard} ${selectedClient?.id === client.id ? styles.selected : ''}`}
+                  onClick={() => setSelectedClient(client)}
+                >
+                  <Avatar name={client.fullName} size="lg" imageUrl={client.avatarUrl} />
+                  <div className={styles.stylistInfo}>
+                    <span className={styles.stylistName}>{client.fullName}</span>
+                    <span className={styles.stylistSpecialty}>
+                      {client.role === 'client' ? 'Cliente' : client.role === 'admin' ? 'Admin' : client.role === 'stylist' ? 'Estilista' : client.role}
+                    </span>
+                    {client.phone && <span className={styles.stylistDesc}>{client.phone}</span>}
+                  </div>
+                </div>
+              ))}
+              {filteredClients.length === 0 && (
+                <div style={{ textAlign: 'center', gridColumn: '1 / -1', padding: '2rem', color: 'var(--neutral-500)' }}>
+                  <p>No se encontraron clientes.</p>
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className={styles.navButtons}>
+            <div />
+            <Button
+              variant="primary"
+              onClick={() => setStep('service')}
+              disabled={!selectedClient}
+              icon={<ChevronRight size={18} />}
+            >
+              Siguiente
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* Step 1: Select Service */}
       {step === 'service' && (
@@ -188,7 +283,11 @@ export default function BookView({ onSuccess, userId }: BookViewProps) {
             </div>
           )}
           <div className={styles.navButtons}>
-            <div />
+            {isStaff ? (
+              <Button variant="ghost" onClick={() => setStep('client')} icon={<ChevronLeft size={18} />}>
+                Atrás
+              </Button>
+            ) : <div />}
             <Button
               variant="primary"
               onClick={() => setStep('stylist')}
@@ -330,6 +429,12 @@ export default function BookView({ onSuccess, userId }: BookViewProps) {
           <h3 className={styles.sectionTitle}>Confirma tu reserva</h3>
 
           <Card className={styles.confirmCard}>
+            {isStaff && selectedClient && (
+              <div className={styles.confirmRow}>
+                <span className={styles.confirmLabel}>Cliente</span>
+                <span className={styles.confirmValue}>{selectedClient.fullName}</span>
+              </div>
+            )}
             <div className={styles.confirmRow}>
               <span className={styles.confirmLabel}>Servicio</span>
               <span className={styles.confirmValue}>{selectedService.name}</span>

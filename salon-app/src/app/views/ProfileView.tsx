@@ -10,7 +10,7 @@ import Button from '@/components/atoms/Button/Button';
 import Avatar from '@/components/atoms/Avatar/Avatar';
 import AlertBanner from '@/components/molecules/AlertBanner/AlertBanner';
 import { api } from '@/lib/api';
-import { BloodType, Profile } from '@/lib/types';
+import { BloodType, Profile, Salon } from '@/lib/types';
 
 const bloodTypeOptions = [
   { value: 'A+', label: 'A+' }, { value: 'A-', label: 'A-' },
@@ -29,6 +29,7 @@ const roleOptions = [
   { value: 'client', label: 'Cliente' },
   { value: 'admin', label: 'Administrador' },
   { value: 'stylist', label: 'Estilista' },
+  { value: 'superadmin', label: 'Super Admin' },
 ];
 
 interface ProfileViewProps {
@@ -46,6 +47,7 @@ export default function ProfileView({ userId, userEmail, initialProfile, current
   const [saved, setSaved] = useState(false);
   const [privacyAccepted, setPrivacyAccepted] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [salons, setSalons] = useState<Salon[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -57,8 +59,12 @@ export default function ProfileView({ userId, userEmail, initialProfile, current
     const loadProfile = async () => {
       try {
         setLoading(true);
-        const data = await api.getProfile(userId);
+        const [data, salonsList] = await Promise.all([
+          api.getProfile(userId),
+          api.getSalons(),
+        ]);
         setProfile(data);
+        setSalons(salonsList);
       } catch (err: any) {
         setError(`Error al cargar: ${err?.message ?? JSON.stringify(err)}`);
       } finally {
@@ -128,7 +134,7 @@ export default function ProfileView({ userId, userEmail, initialProfile, current
     );
   }
 
-  const isAdmin = currentViewerRole === 'admin' || profile?.role === 'admin';
+  const isAdmin = currentViewerRole === 'admin' || currentViewerRole === 'superadmin' || profile?.role === 'admin' || profile?.role === 'superadmin';
   const displayEmail = userEmail ?? profile.email;
 
   return (
@@ -252,6 +258,16 @@ export default function ProfileView({ userId, userEmail, initialProfile, current
               options={roleOptions}
               value={profile.role || 'client'}
               onChange={(e) => updateField('role', e.target.value)}
+              disabled={!isAdmin}
+            />
+            <SelectInput
+              label="Salón Asignado"
+              options={[
+                { value: '', label: 'Sin salón (global)' },
+                ...salons.map(s => ({ value: s.id, label: s.name })),
+              ]}
+              value={profile.salonId || ''}
+              onChange={(e) => updateField('salonId', e.target.value)}
               disabled={!isAdmin}
             />
             {profile.role === 'stylist' && (
