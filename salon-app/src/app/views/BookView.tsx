@@ -2,12 +2,12 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { ChevronLeft, ChevronRight, Check, Search } from 'lucide-react';
 import styles from './BookView.module.css';
 import Card from '@/components/atoms/Card/Card';
+import ServiceCard from '@/components/molecules/ServiceCard/ServiceCard';
 import Button from '@/components/atoms/Button/Button';
 import Avatar from '@/components/atoms/Avatar/Avatar';
 import Input from '@/components/atoms/Input/Input';
-import { generateTimeSlots } from '@/lib/mockData';
 import { api } from '@/lib/api';
-import { Service, Stylist, Profile } from '@/lib/types';
+import { Service, Stylist, Profile, Salon } from '@/lib/types';
 
 interface BookViewProps {
   onSuccess: () => void;
@@ -15,51 +15,109 @@ interface BookViewProps {
   userRole?: string;
 }
 
-type Step = 'client' | 'service' | 'stylist' | 'datetime' | 'confirm';
+type Step = 'salon' | 'client' | 'service' | 'stylist' | 'datetime' | 'confirm';
 
 const categoryIcons: Record<string, string> = {
   'Cabello': '💇‍♀️', 'Uñas': '💅', 'Facial': '🧖‍♀️',
   'Cuerpo': '✨', 'Maquillaje': '💄',
 };
 
+function getStepList(userRole?: string): { labels: string[]; keys: Step[] } {
+  if (userRole === 'superadmin') {
+    return {
+      labels: ['Salón', 'Cliente', 'Servicio', 'Profesional', 'Fecha y Hora', 'Confirmar'],
+      keys: ['salon', 'client', 'service', 'stylist', 'datetime', 'confirm'],
+    };
+  }
+  if (userRole === 'admin') {
+    return {
+      labels: ['Cliente', 'Servicio', 'Profesional', 'Fecha y Hora', 'Confirmar'],
+      keys: ['client', 'service', 'stylist', 'datetime', 'confirm'],
+    };
+  }
+  return {
+    labels: ['Servicio', 'Profesional', 'Fecha y Hora', 'Confirmar'],
+    keys: ['service', 'stylist', 'datetime', 'confirm'],
+  };
+}
+
 export default function BookView({ onSuccess, userId, userRole }: BookViewProps) {
-  const isStaff = userRole === 'admin' || userRole === 'superadmin';
-  const [step, setStep] = useState<Step>(isStaff ? 'client' : 'service');
+  const isSuperadmin = userRole === 'superadmin';
+  const isStaff = userRole === 'admin' || isSuperadmin;
+  const { labels: stepLabels, keys: stepKeys } = getStepList(userRole);
+
+  const [step, setStep] = useState<Step>(stepKeys[0]);
   const [selectedService, setSelectedService] = useState<Service | null>(null);
   const [selectedStylist, setSelectedStylist] = useState<Stylist | null>(null);
-  const [selectedDate, setSelectedDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [selectedDate, setSelectedDate] = useState(() => new Date().toLocaleDateString('sv'));
   const [selectedTime, setSelectedTime] = useState('');
   const [isBooked, setIsBooked] = useState(false);
 
-  const [services, setServices] = useState<Service[]>([]);
-  const [loadingServices, setLoadingServices] = useState(true);
+  // Salon selection (superadmin)
+  const [salons, setSalons] = useState<Salon[]>([]);
+  const [loadingSalons, setLoadingSalons] = useState(false);
+  const [selectedSalon, setSelectedSalon] = useState<Salon | null>(null);
 
-  const [stylists, setStylists] = useState<Stylist[]>([]);
-  const [loadingStylists, setLoadingStylists] = useState(false);
-  const [stylistQuery, setStylistQuery] = useState('');
-
-  // Client selection (admin/superadmin)
+  // Client selection (staff)
   const [clients, setClients] = useState<Profile[]>([]);
   const [loadingClients, setLoadingClients] = useState(false);
   const [selectedClient, setSelectedClient] = useState<Profile | null>(null);
   const [clientQuery, setClientQuery] = useState('');
 
+  const [services, setServices] = useState<Service[]>([]);
+  const [loadingServices, setLoadingServices] = useState(false);
+  const [activeCategory, setActiveCategory] = useState('Todos');
+
+  const [stylists, setStylists] = useState<Stylist[]>([]);
+  const [loadingStylists, setLoadingStylists] = useState(false);
+  const [stylistQuery, setStylistQuery] = useState('');
+
+  const [timeSlots, setTimeSlots] = useState<{time: string, available: boolean}[]>([]);
+  const [loadingTimeSlots, setLoadingTimeSlots] = useState(false);
+
+  // The effective salonId for filtering
+  const effectiveSalonId = isSuperadmin ? selectedSalon?.id : undefined;
+
+  // 1. Load salons for superadmin
   useEffect(() => {
-    if (isStaff) {
-      const fetchClients = async () => {
+    if (isSuperadmin) {
+      const fetch = async () => {
+        try {
+          setLoadingSalons(true);
+          const data = await api.getSalons();
+          setSalons(data);
+        } catch (err) {
+          console.error('Error al cargar salones:', err);
+        } finally {
+          setLoadingSalons(false);
+        }
+      };
+      fetch();
+    }
+  }, [isSuperadmin]);
+
+  // 2. Load clients when entering client step
+  useEffect(() => {
+    if (step === 'client' && isStaff) {
+      const fetch = async () => {
         try {
           setLoadingClients(true);
           const data = await api.getAllProfiles();
-          setClients(data);
+          // For superadmin, filter by selected salon
+          if (isSuperadmin && effectiveSalonId) {
+            setClients(data.filter(p => p.salonId === effectiveSalonId));
+          } else {
+            setClients(data);
+          }
         } catch (err) {
           console.error('Error al cargar clientes:', err);
         } finally {
           setLoadingClients(false);
         }
       };
-      fetchClients();
+      fetch();
     }
-  }, [isStaff]);
+  }, [step, isStaff, isSuperadmin, effectiveSalonId]);
 
   const filteredClients = useMemo(() => {
     return clients.filter(c =>
@@ -69,27 +127,39 @@ export default function BookView({ onSuccess, userId, userRole }: BookViewProps)
     );
   }, [clients, clientQuery]);
 
+  // 3. Load services when entering service step
   useEffect(() => {
-    const fetchServices = async () => {
-      try {
-        setLoadingServices(true);
-        const data = await api.getServices(userId);
-        setServices(data.filter(s => s.isActive));
-      } catch (err) {
-        console.error('Error al cargar servicios:', err);
-      } finally {
-        setLoadingServices(false);
-      }
-    };
-    fetchServices();
-  }, [userId]);
+    if (step === 'service') {
+      setActiveCategory('Todos');
+      const fetch = async () => {
+        try {
+          setLoadingServices(true);
+          const data = await api.getServices(userId, effectiveSalonId);
+          setServices(data.filter(s => s.isActive));
+        } catch (err) {
+          console.error('Error al cargar servicios:', err);
+        } finally {
+          setLoadingServices(false);
+        }
+      };
+      fetch();
+    }
+  }, [step, userId, effectiveSalonId]);
 
+  // Derived: category filter for services
+  const serviceCategories = ['Todos', ...Array.from(new Set(services.map((s) => s.category)))];
+  const filteredServicesByCategory =
+    activeCategory === 'Todos'
+      ? services
+      : services.filter((s) => s.category === activeCategory);
+
+  // 4. Load stylists when entering stylist step
   useEffect(() => {
-    if (step === 'stylist' && stylists.length === 0) {
-      const fetchStylists = async () => {
+    if (step === 'stylist') {
+      const fetch = async () => {
         try {
           setLoadingStylists(true);
-          const data = await api.getStylists();
+          const data = await api.getStylists(userId, effectiveSalonId);
           setStylists(data);
         } catch (err) {
           console.error('Error al cargar estilistas:', err);
@@ -97,24 +167,21 @@ export default function BookView({ onSuccess, userId, userRole }: BookViewProps)
           setLoadingStylists(false);
         }
       };
-      fetchStylists();
+      fetch();
     }
-  }, [step]);
+  }, [step, userId, effectiveSalonId]);
 
-  // Filtering stylists
   const filteredStylists = useMemo(() => {
-    return stylists.filter(s => 
+    return stylists.filter(s =>
       s.name.toLowerCase().includes(stylistQuery.toLowerCase()) ||
       s.specialty.toLowerCase().includes(stylistQuery.toLowerCase())
     );
   }, [stylists, stylistQuery]);
 
-  const [timeSlots, setTimeSlots] = useState<{time: string, available: boolean}[]>([]);
-  const [loadingTimeSlots, setLoadingTimeSlots] = useState(false);
-
+  // 5. Load time slots
   useEffect(() => {
     if (step === 'datetime' && selectedStylist && selectedService) {
-      const fetchTimeSlots = async () => {
+      const fetch = async () => {
         try {
           setLoadingTimeSlots(true);
           const workStart = selectedStylist.workStartTime || '09:00';
@@ -127,11 +194,11 @@ export default function BookView({ onSuccess, userId, userRole }: BookViewProps)
           setLoadingTimeSlots(false);
         }
       };
-      fetchTimeSlots();
+      fetch();
     }
   }, [step, selectedDate, selectedStylist, selectedService]);
 
-  // Generate calendar days
+  // Calendar days
   const today = new Date();
   const calendarDays: Date[] = [];
   for (let i = 0; i < 14; i++) {
@@ -139,6 +206,17 @@ export default function BookView({ onSuccess, userId, userRole }: BookViewProps)
     d.setDate(today.getDate() + i);
     calendarDays.push(d);
   }
+
+  // Navigation helpers
+  const prevStep = () => {
+    const idx = stepKeys.indexOf(step);
+    if (idx > 0) setStep(stepKeys[idx - 1]);
+  };
+
+  const nextStep = () => {
+    const idx = stepKeys.indexOf(step);
+    if (idx < stepKeys.length - 1) setStep(stepKeys[idx + 1]);
+  };
 
   const handleConfirm = async () => {
     if (!selectedService) return;
@@ -151,10 +229,11 @@ export default function BookView({ onSuccess, userId, userRole }: BookViewProps)
           serviceName: selectedService.name,
           stylistId: selectedStylist?.id,
           stylistName: selectedStylist?.name,
-          appointmentDate: `${selectedDate}T${selectedTime}:00`,
+          appointmentDate: new Date(`${selectedDate}T${selectedTime}:00`).toISOString(),
           status: 'pendiente',
           isPaid: false,
           paymentMethod: 'efectivo',
+          salonId: effectiveSalonId,
         },
         userId
       );
@@ -175,6 +254,7 @@ export default function BookView({ onSuccess, userId, userRole }: BookViewProps)
           <h2>¡Cita Reservada!</h2>
           <p>{selectedService?.name}</p>
           <p className={styles.successDate}>{selectedDate} a las {selectedTime}</p>
+          {selectedSalon && <p style={{ fontSize: '0.85rem', color: 'var(--neutral-500)' }}>{selectedSalon.name}</p>}
           <p className={styles.successNote}>
             Recuerda que el pago se realiza en efectivo al asistir al salón.
           </p>
@@ -187,13 +267,7 @@ export default function BookView({ onSuccess, userId, userRole }: BookViewProps)
     <div className={styles.page}>
       {/* Steps Indicator */}
       <div className={styles.steps}>
-        {(isStaff
-          ? ['Cliente', 'Servicio', 'Profesional', 'Fecha y Hora', 'Confirmar']
-          : ['Servicio', 'Profesional', 'Fecha y Hora', 'Confirmar']
-        ).map((s, i) => {
-          const stepKeys: Step[] = isStaff
-            ? ['client', 'service', 'stylist', 'datetime', 'confirm']
-            : ['service', 'stylist', 'datetime', 'confirm'];
+        {stepLabels.map((s, i) => {
           const isActive = step === stepKeys[i];
           const isDone = stepKeys.indexOf(step) > i;
           return (
@@ -205,7 +279,51 @@ export default function BookView({ onSuccess, userId, userRole }: BookViewProps)
         })}
       </div>
 
-      {/* Step: Select Client (admin/superadmin only) */}
+      {/* Step: Select Salon (superadmin only) */}
+      {step === 'salon' && isSuperadmin && (
+        <div className={styles.section}>
+          <h3 className={styles.sectionTitle}>¿En qué salón se reservará la cita?</h3>
+
+          {loadingSalons ? (
+            <p>Cargando salones...</p>
+          ) : (
+            <div className={styles.serviceGrid}>
+              {salons.map((salon) => (
+                <div
+                  key={salon.id}
+                  className={`${styles.serviceOption} ${selectedSalon?.id === salon.id ? styles.selected : ''}`}
+                  onClick={() => {
+                    setSelectedSalon(salon);
+                    // Reset dependent selections
+                    setSelectedClient(null);
+                    setSelectedService(null);
+                    setSelectedStylist(null);
+                    setSelectedTime('');
+                  }}
+                >
+                  <span className={styles.serviceEmoji}>🏪</span>
+                  <span className={styles.serviceName}>{salon.name}</span>
+                  {salon.address && <span className={styles.serviceMeta}>{salon.address}</span>}
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className={styles.navButtons}>
+            <div />
+            <Button
+              variant="primary"
+              onClick={nextStep}
+              disabled={!selectedSalon}
+              icon={<ChevronRight size={18} />}
+            >
+              Siguiente
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Step: Select Client (staff only) */}
       {step === 'client' && isStaff && (
         <div className={styles.section}>
           <h3 className={styles.sectionTitle}>¿Para qué cliente es la cita?</h3>
@@ -248,10 +366,12 @@ export default function BookView({ onSuccess, userId, userRole }: BookViewProps)
           )}
 
           <div className={styles.navButtons}>
-            <div />
+            {isSuperadmin ? (
+              <Button variant="ghost" onClick={prevStep} icon={<ChevronLeft size={18} />}>Atrás</Button>
+            ) : <div />}
             <Button
               variant="primary"
-              onClick={() => setStep('service')}
+              onClick={nextStep}
               disabled={!selectedClient}
               icon={<ChevronRight size={18} />}
             >
@@ -261,36 +381,61 @@ export default function BookView({ onSuccess, userId, userRole }: BookViewProps)
         </div>
       )}
 
-      {/* Step 1: Select Service */}
+      {/* Step: Select Service (Enhanced Catalog) */}
       {step === 'service' && (
         <div className={styles.section}>
           <h3 className={styles.sectionTitle}>¿Qué servicio deseas?</h3>
+
+          {/* Category Filters */}
+          {!loadingServices && services.length > 0 && (
+            <div className={styles.categoryFilters}>
+              {serviceCategories.map((cat) => (
+                <button
+                  key={cat}
+                  className={`${styles.categoryBtn} ${activeCategory === cat ? styles.categoryActive : ''}`}
+                  onClick={() => setActiveCategory(cat)}
+                >
+                  {cat}
+                </button>
+              ))}
+            </div>
+          )}
+
           {loadingServices ? (
             <p>Cargando catálogo...</p>
           ) : (
-            <div className={styles.serviceGrid}>
-              {services.map((srv) => (
+            <div className={styles.catalogGrid}>
+              {filteredServicesByCategory.map((srv, i) => (
                 <div
                   key={srv.id}
-                  className={`${styles.serviceOption} ${selectedService?.id === srv.id ? styles.selected : ''}`}
+                  className={`${styles.catalogCardWrap} ${selectedService?.id === srv.id ? styles.catalogCardSelected : ''}`}
+                  style={{ animationDelay: `${i * 0.06}s` }}
                   onClick={() => setSelectedService(srv)}
                 >
-                  <span className={styles.serviceEmoji}>{categoryIcons[srv.category] || '✂️'}</span>
-                  <span className={styles.serviceName}>{srv.name}</span>
-                  <span className={styles.serviceMeta}>{srv.durationMinutes}min · ${srv.price.toLocaleString()}</span>
+                  <ServiceCard service={srv} />
+                  {selectedService?.id === srv.id && (
+                    <div className={styles.catalogCheckmark}>
+                      <Check size={16} />
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
           )}
+
+          {!loadingServices && filteredServicesByCategory.length === 0 && (
+            <div className={styles.catalogEmpty}>
+              <p>No hay servicios en esta categoría</p>
+            </div>
+          )}
+
           <div className={styles.navButtons}>
             {isStaff ? (
-              <Button variant="ghost" onClick={() => setStep('client')} icon={<ChevronLeft size={18} />}>
-                Atrás
-              </Button>
+              <Button variant="ghost" onClick={prevStep} icon={<ChevronLeft size={18} />}>Atrás</Button>
             ) : <div />}
             <Button
               variant="primary"
-              onClick={() => setStep('stylist')}
+              onClick={nextStep}
               disabled={!selectedService}
               icon={<ChevronRight size={18} />}
             >
@@ -300,13 +445,13 @@ export default function BookView({ onSuccess, userId, userRole }: BookViewProps)
         </div>
       )}
 
-      {/* Step 2: Select Stylist */}
+      {/* Step: Select Stylist */}
       {step === 'stylist' && (
         <div className={styles.section}>
           <h3 className={styles.sectionTitle}>Selecciona un profesional</h3>
-          
+
           <div style={{ marginBottom: '1.5rem' }}>
-            <Input 
+            <Input
               icon={<Search size={18} />}
               placeholder="Buscar por nombre o especialidad..."
               value={stylistQuery}
@@ -334,19 +479,17 @@ export default function BookView({ onSuccess, userId, userRole }: BookViewProps)
               ))}
               {filteredStylists.length === 0 && (
                 <div style={{ textAlign: 'center', gridColumn: '1 / -1', padding: '2rem', color: 'var(--neutral-500)' }}>
-                  <p>No se encontraron profesionales que coincidan con tu búsqueda.</p>
+                  <p>No se encontraron profesionales.</p>
                 </div>
               )}
             </div>
           )}
 
           <div className={styles.navButtons}>
-            <Button variant="ghost" onClick={() => setStep('service')} icon={<ChevronLeft size={18} />}>
-              Atrás
-            </Button>
+            <Button variant="ghost" onClick={prevStep} icon={<ChevronLeft size={18} />}>Atrás</Button>
             <Button
               variant="primary"
-              onClick={() => setStep('datetime')}
+              onClick={nextStep}
               disabled={!selectedStylist}
               icon={<ChevronRight size={18} />}
             >
@@ -356,15 +499,14 @@ export default function BookView({ onSuccess, userId, userRole }: BookViewProps)
         </div>
       )}
 
-      {/* Step 3: Select Date & Time */}
+      {/* Step: Select Date & Time */}
       {step === 'datetime' && (
         <div className={styles.section}>
           <h3 className={styles.sectionTitle}>Selecciona fecha y hora</h3>
 
-          {/* Date Selector */}
           <div className={styles.dateScroller}>
             {calendarDays.map((d) => {
-              const dateStr = d.toISOString().split('T')[0];
+              const dateStr = d.toLocaleDateString('sv');
               const isSelected = selectedDate === dateStr;
               const dayName = d.toLocaleDateString('es', { weekday: 'short' });
               return (
@@ -380,7 +522,6 @@ export default function BookView({ onSuccess, userId, userRole }: BookViewProps)
             })}
           </div>
 
-          {/* Time Slots */}
           <div style={{ minHeight: '120px' }}>
             {loadingTimeSlots ? (
               <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100px', color: 'var(--neutral-400)' }}>
@@ -408,12 +549,10 @@ export default function BookView({ onSuccess, userId, userRole }: BookViewProps)
           </div>
 
           <div className={styles.navButtons}>
-            <Button variant="ghost" onClick={() => setStep('stylist')} icon={<ChevronLeft size={18} />}>
-              Atrás
-            </Button>
+            <Button variant="ghost" onClick={prevStep} icon={<ChevronLeft size={18} />}>Atrás</Button>
             <Button
               variant="primary"
-              onClick={() => setStep('confirm')}
+              onClick={nextStep}
               disabled={!selectedTime}
               icon={<ChevronRight size={18} />}
             >
@@ -423,12 +562,18 @@ export default function BookView({ onSuccess, userId, userRole }: BookViewProps)
         </div>
       )}
 
-      {/* Step 4: Confirm */}
+      {/* Step: Confirm */}
       {step === 'confirm' && selectedService && (
         <div className={styles.section}>
           <h3 className={styles.sectionTitle}>Confirma tu reserva</h3>
 
           <Card className={styles.confirmCard}>
+            {isSuperadmin && selectedSalon && (
+              <div className={styles.confirmRow}>
+                <span className={styles.confirmLabel}>Salón</span>
+                <span className={styles.confirmValue}>{selectedSalon.name}</span>
+              </div>
+            )}
             {isStaff && selectedClient && (
               <div className={styles.confirmRow}>
                 <span className={styles.confirmLabel}>Cliente</span>
@@ -463,14 +608,12 @@ export default function BookView({ onSuccess, userId, userRole }: BookViewProps)
             </div>
             <div className={styles.confirmRow}>
               <span className={styles.confirmLabel}>Pago</span>
-              <span className={styles.confirmValue}>💵 Efectivo en el local</span>
+              <span className={styles.confirmValue}>Efectivo en el local</span>
             </div>
           </Card>
 
           <div className={styles.navButtons}>
-            <Button variant="ghost" onClick={() => setStep('datetime')} icon={<ChevronLeft size={18} />}>
-              Atrás
-            </Button>
+            <Button variant="ghost" onClick={prevStep} icon={<ChevronLeft size={18} />}>Atrás</Button>
             <Button variant="primary" size="lg" onClick={handleConfirm} icon={<Check size={18} />}>
               Confirmar Reserva
             </Button>

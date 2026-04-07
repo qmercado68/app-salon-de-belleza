@@ -3,7 +3,6 @@
 import React, { useState } from 'react';
 import DashboardLayout from '@/components/templates/DashboardLayout/DashboardLayout';
 import DashboardView from './views/DashboardView';
-import ServicesView from './views/ServicesView';
 import AppointmentsView from './views/AppointmentsView';
 import BookView from './views/BookView';
 import ProfileView from './views/ProfileView';
@@ -21,12 +20,11 @@ import { supabase } from '@/lib/supabase';
 import { api } from '@/lib/api';
 import { Profile } from '@/lib/types';
 
-type ViewId = 'login' | 'dashboard' | 'services' | 'appointments' | 'book' | 'profile' | 'admin' | 'reports' | 'sales' | 'inventory' | 'users' | 'admin-services' | 'pos' | 'salones' | 'terceros';
+type ViewId = 'login' | 'dashboard' | 'appointments' | 'book' | 'profile' | 'admin' | 'reports' | 'sales' | 'inventory' | 'users' | 'admin-services' | 'pos' | 'salones' | 'terceros';
 
 const pageTitles: Record<ViewId, { title: string; subtitle?: string }> = {
   login: { title: 'Iniciar Sesión' },
   dashboard: { title: 'Dashboard', subtitle: 'Revisa la actividad de tu salón hoy' },
-  services: { title: 'Catálogo de Servicios', subtitle: 'Explora todos nuestros tratamientos' },
   appointments: { title: 'Mis Citas', subtitle: 'Gestiona tus citas y revisa tu historial' },
   book: { title: 'Reservar Cita', subtitle: 'Selecciona un servicio, fecha y hora' },
   profile: { title: 'Mi Perfil', subtitle: 'Tu información personal y ficha médica' },
@@ -166,8 +164,6 @@ export default function HomePage() {
     switch (currentView) {
       case 'dashboard':
         return <DashboardView onNavigate={setCurrentView} userId={userId} />;
-      case 'services':
-        return <ServicesView onBook={() => setCurrentView('book')} userId={userId} />;
       case 'appointments':
         return <AppointmentsView userId={userId} role={userRole} />;
       case 'book':

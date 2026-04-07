@@ -7,6 +7,7 @@ export type UserRole = 'client' | 'admin' | 'stylist' | 'superadmin';
 export interface Salon {
   id: string;
   name: string;
+  nit: string;
   slug: string;
   address?: string;
   phone?: string;
@@ -139,6 +140,8 @@ export interface Appointment {
   isPaid: boolean;
   notes?: string;
   salonId?: string;
+  salonName?: string;
+  clientPhone?: string;
 }
 
 export interface TimeSlot {

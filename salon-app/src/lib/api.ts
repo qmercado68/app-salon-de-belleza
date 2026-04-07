@@ -30,6 +30,7 @@ export const api = {
     return (data as any[]).map(d => ({
       id: d.id,
       name: d.name,
+      nit: d.nit,
       slug: d.slug,
       address: d.address,
       phone: d.phone,
@@ -55,6 +56,7 @@ export const api = {
     return {
       id: data.id,
       name: data.name,
+      nit: data.nit,
       slug: data.slug,
       address: data.address,
       phone: data.phone,
@@ -72,6 +74,7 @@ export const api = {
 
     const payload = {
       name: salon.name,
+      nit: salon.nit,
       slug: salon.slug,
       address: salon.address,
       phone: salon.phone,
@@ -87,6 +90,7 @@ export const api = {
     return {
       id: data.id,
       name: data.name,
+      nit: data.nit,
       slug: data.slug,
       address: data.address,
       phone: data.phone,
@@ -104,6 +108,7 @@ export const api = {
 
     const payload: any = {};
     if (salon.name !== undefined) payload.name = salon.name;
+    if (salon.nit !== undefined) payload.nit = salon.nit;
     if (salon.slug !== undefined) payload.slug = salon.slug;
     if (salon.address !== undefined) payload.address = salon.address;
     if (salon.phone !== undefined) payload.phone = salon.phone;
@@ -120,27 +125,35 @@ export const api = {
   async getSalonId(userId: string): Promise<string | null> {
     if (!isSupabaseConfigured()) return null;
 
+    // Si es demo-user o no es un UUID válido, no intentar consultar Supabase
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(userId);
+    if (!isUuid) return null;
+
     const { data, error } = await supabase
       .from('profiles')
       .select('salon_id')
       .eq('id', userId)
       .single();
 
-    if (error) throw error;
+    if (error) return null; // No lanzar error en caso de que no exista el registro
     return (data as any)?.salon_id ?? null;
   },
 
   // SERVICES
-  async getServices(userId?: string): Promise<Service[]> {
+  async getServices(userId?: string, salonId?: string): Promise<Service[]> {
     if (!isSupabaseConfigured()) return mockServices;
 
     let query = supabase
       .from('services')
       .select('*');
 
-    if (userId) {
-      const salonId = await api.getSalonId(userId);
-      if (salonId) query = query.eq('salon_id', salonId);
+    if (salonId) {
+      query = query.or(`salon_id.eq.${salonId},salon_id.is.null`);
+    } else if (userId) {
+      const resolved = await api.getSalonId(userId);
+      if (resolved) {
+        query = query.or(`salon_id.eq.${resolved},salon_id.is.null`);
+      }
     }
 
     const { data, error } = await query;
@@ -257,7 +270,7 @@ export const api = {
     })) as Profile[];
   },
 
-  async getStylists(): Promise<Stylist[]> {
+  async getStylists(userId?: string, salonId?: string): Promise<Stylist[]> {
     if (!isSupabaseConfigured()) {
       return [
         { id: 'sty-1', name: 'Ana Rodríguez', specialty: 'Colorista Senior', description: 'Experta en balayage.', workStartTime: '09:00', workEndTime: '15:00' },
@@ -265,11 +278,22 @@ export const api = {
       ];
     }
 
-    const { data, error } = await supabase
+    let query = supabase
       .from('profiles')
-      .select('id, full_name, specialty, avatar_url, medical_conditions, work_start_time, work_end_time')
+      .select('id, full_name, specialty, avatar_url, medical_conditions, work_start_time, work_end_time, salon_id')
       .eq('role', 'stylist')
       .order('full_name', { ascending: true });
+
+    if (salonId) {
+      query = query.or(`salon_id.eq.${salonId},salon_id.is.null`);
+    } else if (userId) {
+      const resolved = await api.getSalonId(userId);
+      if (resolved) {
+        query = query.or(`salon_id.eq.${resolved},salon_id.is.null`);
+      }
+    }
+
+    const { data, error } = await query;
 
     if (error) throw error;
     
@@ -350,13 +374,17 @@ export const api = {
 
   // APPOINTMENTS
   async getAppointments(clientId?: string, userId?: string): Promise<Appointment[]> {
-    if (!isSupabaseConfigured()) {
-      return clientId
-        ? mockAppointments.filter(a => a.clientId === clientId)
+    // Si los IDs no son UUIDs válidos, retornar mock en lugar de fallar (modo demo)
+    const isValidClientId = !clientId || /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(clientId);
+    const isValidUserId = !userId || /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(userId);
+
+    if (!isSupabaseConfigured() || !isValidClientId || !isValidUserId) {
+      return clientId && clientId === 'demo-user'
+        ? mockAppointments.filter(a => a.clientId === 'demo-user')
         : mockAppointments;
     }
 
-    let query = supabase.from('appointments').select('*, services(name), profiles!client_id(full_name, allergies)');
+    let query = supabase.from('appointments').select('*, services(name, price), profiles!client_id(full_name, allergies, phone), stylist:profiles!stylist_id(full_name), salons(name)');
 
     if (userId) {
       const salonId = await api.getSalonId(userId);
@@ -371,14 +399,19 @@ export const api = {
       id: d.id,
       clientId: d.client_id,
       clientName: d.profiles?.full_name ?? '',
+      clientPhone: d.profiles?.phone ?? '',
       serviceId: d.service_id,
       serviceName: d.services?.name ?? '',
+      servicePrice: d.services?.price ?? 0,
+      stylistId: d.stylist_id,
+      stylistName: d.stylist?.full_name ?? 'Sin asignar',
       appointmentDate: d.appointment_date,
       status: d.status,
       paymentMethod: d.payment_method,
       isPaid: d.is_paid ?? false,
       notes: d.notes ?? '',
       salonId: d.salon_id,
+      salonName: d.salons?.name ?? '',
       allergies: d.profiles?.allergies ?? '',
     })) as Appointment[];
   },
@@ -389,12 +422,22 @@ export const api = {
       return;
     }
 
-    let payload: any = { ...appointment };
-
-    if (userId && !payload.salon_id) {
-      const salonId = await api.getSalonId(userId);
-      if (salonId) payload.salon_id = salonId;
+    let salonId = appointment.salonId || null;
+    if (!salonId && userId) {
+      salonId = await api.getSalonId(userId);
     }
+
+    const payload: any = {
+      client_id: appointment.clientId,
+      service_id: appointment.serviceId,
+      stylist_id: appointment.stylistId || null,
+      appointment_date: appointment.appointmentDate,
+      status: appointment.status || 'pendiente',
+      is_paid: appointment.isPaid ?? false,
+      payment_method: appointment.paymentMethod || 'efectivo',
+      notes: appointment.notes || null,
+      salon_id: salonId,
+    };
 
     const { error } = await supabase
       .from('appointments')
@@ -425,17 +468,14 @@ export const api = {
       return baseSlots.map(time => ({ time, available: true }));
     }
 
-    const startOfDay = `${date}T00:00:00.000Z`;
-    const endOfDay = `${date}T23:59:59.999Z`;
+    const startOfDay = new Date(`${date}T00:00:00`).toISOString();
+    const endOfDay = new Date(`${date}T23:59:59.999`).toISOString();
 
-    // Fetch existing appointments for the stylist on that day
-    const { data: appointments, error } = await supabase
-      .from('appointments')
-      .select('appointment_date, services(duration_minutes), status')
-      .eq('stylist_id', stylistId)
-      .neq('status', 'cancelada')
-      .gte('appointment_date', startOfDay)
-      .lte('appointment_date', endOfDay);
+    // Cargar citas ocupadas usando el RPC seguro que ignora RLS
+    const { data: appointments, error } = await supabase.rpc('get_busy_slots', {
+      p_stylist_id: stylistId,
+      p_date: date
+    });
 
     if (error) {
       console.error('Error fetching appointments for slots:', error);
@@ -446,7 +486,7 @@ export const api = {
     const occupiedRanges = (appointments || []).map((appt: any) => {
       const d = new Date(appt.appointment_date);
       const startMins = d.getHours() * 60 + d.getMinutes();
-      const dur = appt.services?.duration_minutes || 30; // default to 30 if null
+      const dur = appt.duration_minutes || 30; // El RPC ya nos da la duración
       return { start: startMins, end: startMins + dur };
     });
 
@@ -536,8 +576,8 @@ export const api = {
       );
     }
 
-    const startOfDay = `${date}T00:00:00.000Z`;
-    const endOfDay = `${date}T23:59:59.999Z`;
+    const startOfDay = new Date(`${date}T00:00:00`).toISOString();
+    const endOfDay = new Date(`${date}T23:59:59.999`).toISOString();
 
     const { data, error } = await supabase
       .from('appointments')
@@ -766,8 +806,8 @@ export const api = {
       };
     }
 
-    const startOfDay = `${date}T00:00:00.000Z`;
-    const endOfDay = `${date}T23:59:59.999Z`;
+    const startOfDay = new Date(`${date}T00:00:00`).toISOString();
+    const endOfDay = new Date(`${date}T23:59:59.999`).toISOString();
 
     // 1. Fetch ALL transactions of the day...
     const { data: sales, error: salesError } = await supabase
@@ -844,8 +884,8 @@ export const api = {
       }))];
     }
 
-    const startOfDay = `${date}T00:00:00.000Z`;
-    const endOfDay = `${date}T23:59:59.999Z`;
+    const startOfDay = new Date(`${date}T00:00:00`).toISOString();
+    const endOfDay = new Date(`${date}T23:59:59.999`).toISOString();
 
     // Fetch transactions from the sales table (centralized truth)
     const { data: sales, error } = await supabase

@@ -2,7 +2,7 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-6);
-  max-width: 800px;
+  max-width: 1000px;
   margin: 0 auto;
 }
 
@@ -382,6 +382,98 @@
   padding: var(--space-4);
   background: var(--warning-50);
   border-radius: var(--radius-md);
+}
+
+/* Category Filters */
+.categoryFilters {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  margin-bottom: var(--space-5);
+}
+
+.categoryBtn {
+  padding: var(--space-2) var(--space-5);
+  border-radius: var(--radius-full);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--neutral-600);
+  background: var(--bg-card);
+  border: 1.5px solid var(--neutral-200);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.categoryBtn:hover {
+  border-color: var(--accent-300);
+  color: var(--accent-600);
+}
+
+.categoryActive {
+  background: linear-gradient(135deg, var(--accent-500), var(--primary-500));
+  color: #ffffff;
+  border-color: transparent;
+  box-shadow: 0 4px 12px rgba(108, 99, 255, 0.25);
+}
+
+.categoryActive:hover {
+  color: #ffffff;
+}
+
+/* Catalog Grid */
+.catalogGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: var(--space-5);
+}
+
+.catalogCardWrap {
+  position: relative;
+  border-radius: var(--radius-lg);
+  border: 2.5px solid transparent;
+  cursor: pointer;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  animation: catalogFadeIn 0.4s ease forwards;
+  opacity: 0;
+}
+
+.catalogCardWrap:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 24px rgba(108, 99, 255, 0.12);
+}
+
+.catalogCardSelected {
+  border-color: var(--accent-500);
+  box-shadow: 0 4px 20px rgba(108, 99, 255, 0.2);
+  transform: translateY(-2px);
+}
+
+.catalogCheckmark {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-full);
+  background: var(--accent-500);
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 12px rgba(108, 99, 255, 0.35);
+  animation: scaleIn 0.3s ease;
+  z-index: 2;
+}
+
+.catalogEmpty {
+  text-align: center;
+  padding: var(--space-16);
+  color: var(--neutral-400);
+}
+
+@keyframes catalogFadeIn {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 @keyframes fadeIn {

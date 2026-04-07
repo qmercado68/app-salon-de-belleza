@@ -4,22 +4,92 @@
   gap: var(--space-5);
 }
 
-.filterRow {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.filters {
+.statusFilters {
   display: flex;
   gap: var(--space-2);
   flex-wrap: wrap;
+  padding-bottom: var(--space-2);
+  border-bottom: 2px solid var(--neutral-100);
 }
 
-.count {
-  font-size: var(--text-sm);
+.advancedFilters {
+  display: grid;
+  grid-template-columns: 320px 1fr;
+  gap: var(--space-4);
+  align-items: flex-end;
+  background: var(--neutral-50);
+  padding: var(--space-4);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--neutral-200);
+}
+
+.searchBox {
+  width: 100%;
+}
+
+.selectsGroup {
+  display: flex;
+  gap: var(--space-4);
+  align-items: flex-end;
+  flex-wrap: wrap;
+}
+
+.filterItem {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+  min-width: 140px;
+}
+
+.filterItem label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
   color: var(--neutral-500);
-  font-weight: 500;
+  letter-spacing: 0.05em;
+}
+
+.select, .dateInput {
+  height: 42px;
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--neutral-300);
+  background: white;
+  font-size: var(--text-sm);
+  color: var(--neutral-800);
+  outline: none;
+  transition: all var(--transition-fast);
+}
+
+.select:focus, .dateInput:focus {
+  border-color: var(--primary-500);
+  box-shadow: 0 0 0 3px rgba(236, 72, 153, 0.1);
+}
+
+.resetBtn {
+  height: 42px;
+  width: 42px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: white;
+  border: 1px solid var(--neutral-300);
+  border-radius: var(--radius-md);
+  color: var(--neutral-500);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.resetBtn:hover {
+  background: var(--error-50);
+  color: var(--error-600);
+  border-color: var(--error-200);
+}
+
+.resultsCount {
+  font-size: var(--text-sm);
+  color: var(--neutral-600);
 }
 
 .tableHeader {
@@ -46,14 +116,37 @@
   font-size: var(--text-sm);
 }
 
+.salonGroupTitle {
+  font-size: var(--text-md);
+  font-weight: 700;
+  color: var(--accent-600);
+  margin-bottom: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  background: rgba(236, 72, 153, 0.06);
+  border-left: 3px solid var(--accent-500);
+  border-radius: var(--radius-md);
+}
+
 @media (max-width: 768px) {
   .tableHeader {
     display: none;
   }
 
-  .filterRow {
-    flex-direction: column;
-    align-items: flex-start;
+  .advancedFilters {
+    grid-template-columns: 1fr;
     gap: var(--space-3);
+  }
+
+  .selectsGroup {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .filterItem {
+    width: 100%;
+  }
+
+  .resetBtn {
+    width: 100%;
   }
 }

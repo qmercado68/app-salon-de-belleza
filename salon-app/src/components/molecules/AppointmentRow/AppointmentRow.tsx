@@ -33,7 +33,18 @@ export default function AppointmentRow({
         <div className={styles.details}>
           <span className={styles.service}>{appointment.serviceName}</span>
           {showClient && (
-            <span className={styles.client}>{appointment.clientName}</span>
+            <>
+              <span className={styles.client}>{appointment.clientName}</span>
+              {appointment.clientPhone && (
+                <a 
+                  href={`tel:${appointment.clientPhone}`} 
+                  className={styles.phoneLink}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {appointment.clientPhone}
+                </a>
+              )}
+            </>
           )}
         </div>
       </div>

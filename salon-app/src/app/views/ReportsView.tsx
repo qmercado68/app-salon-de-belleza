@@ -18,7 +18,7 @@ export default function ReportsView({ userId }: ReportsViewProps) {
   const [loading, setLoading] = useState(true);
   const [selectedDate, setSelectedDate] = useState(() => {
     const today = new Date();
-    return today.toISOString().split('T')[0];
+    return today.toLocaleDateString('sv');
   });
 
   useEffect(() => {
@@ -36,9 +36,9 @@ export default function ReportsView({ userId }: ReportsViewProps) {
       // Cargar últimos 7 días para la gráfica
       const reports: DailyReportSummary[] = [];
       for (let i = 6; i >= 0; i--) {
-        const d = new Date(selectedDate);
+        const d = new Date(selectedDate + 'T12:00:00');
         d.setDate(d.getDate() - i);
-        const dateStr = d.toISOString().split('T')[0];
+        const dateStr = d.toLocaleDateString('sv');
         try {
           const r = await api.getDailyReport(dateStr);
           reports.push(r);

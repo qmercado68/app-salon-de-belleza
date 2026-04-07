@@ -30,7 +30,7 @@ export default function POSView({ userId }: POSViewProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [activeCategory, setActiveCategory] = useState('Todos');
   const [activeTab, setActiveTab] = useState<'products' | 'appointments'>('products');
-  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [selectedDate, setSelectedDate] = useState(new Date().toLocaleDateString('sv'));
   const [pendingAppointments, setPendingAppointments] = useState<Appointment[]>([]);
   const [cart, setCart] = useState<SaleItem[]>([]);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('efectivo');
@@ -199,7 +199,7 @@ export default function POSView({ userId }: POSViewProps) {
             onClick={() => setActiveTab('appointments')}
           >
             <Calendar size={18} />
-            Citas {selectedDate === new Date().toISOString().split('T')[0] ? 'de Hoy' : ''}
+            Citas {selectedDate === new Date().toLocaleDateString('sv') ? 'de Hoy' : ''}
           </button>
         </div>
 
@@ -296,7 +296,7 @@ export default function POSView({ userId }: POSViewProps) {
           {activeTab === 'appointments' && pendingAppointments.length === 0 && (
             <div className={styles.noAppointments}>
               <Calendar size={48} strokeWidth={1} />
-              <p>No hay citas pendientes para {selectedDate === new Date().toISOString().split('T')[0] ? 'hoy' : selectedDate}.</p>
+              <p>No hay citas pendientes para {selectedDate === new Date().toLocaleDateString('sv') ? 'hoy' : selectedDate}.</p>
             </div>
           )}
         </div>

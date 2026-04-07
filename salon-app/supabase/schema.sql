@@ -8,7 +8,7 @@
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 -- 0. TABLA RAÍZ: salons
-CREATE TABLE public.salons (
+CREATE TABLE IF NOT EXISTS public.salons (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   name text NOT NULL,
   slug text UNIQUE NOT NULL,
@@ -25,8 +25,19 @@ CREATE TABLE public.salons (
 
 ALTER TABLE public.salons ENABLE ROW LEVEL SECURITY;
 
+-- Políticas para SALONES
+DROP POLICY IF EXISTS "Salones visibles para todos" ON public.salons;
+CREATE POLICY "Salones visibles para todos" 
+  ON public.salons FOR SELECT USING (true);
+
+DROP POLICY IF EXISTS "Solo superadmins pueden gestionar salones" ON public.salons;
+CREATE POLICY "Solo superadmins pueden gestionar salones" 
+  ON public.salons FOR ALL USING (
+    get_my_role() = 'superadmin'
+  );
+
 -- 1. TABLA DE PERFILES (Extiende auth.users)
-CREATE TABLE public.profiles (
+CREATE TABLE IF NOT EXISTS public.profiles (
   id uuid REFERENCES auth.users ON DELETE CASCADE PRIMARY KEY,
   full_name text NOT NULL,
   email text, -- Sincronizado desde auth.users
@@ -49,7 +60,7 @@ CREATE TABLE public.profiles (
 );
 
 -- 2. TABLA DE SERVICIOS
-CREATE TABLE public.services (
+CREATE TABLE IF NOT EXISTS public.services (
   id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
   name text NOT NULL,
   description text,
@@ -63,7 +74,7 @@ CREATE TABLE public.services (
 );
 
 -- 3. TABLA DE CITAS
-CREATE TABLE public.appointments (
+CREATE TABLE IF NOT EXISTS public.appointments (
   id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
   client_id uuid REFERENCES public.profiles(id) ON DELETE SET NULL,
   service_id uuid REFERENCES public.services(id) ON DELETE SET NULL,
@@ -86,55 +97,93 @@ ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.services ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.appointments ENABLE ROW LEVEL SECURITY;
 
--- Políticas para PERFILES
-CREATE POLICY "Los usuarios pueden ver su propio perfil" 
-  ON public.profiles FOR SELECT USING (auth.uid() = id);
+-- Función auxiliar para obtener el rol del usuario actual sin causar recursión en RLS
+-- Usamos SECURITY DEFINER para que la consulta a profiles ignore el RLS
+CREATE OR REPLACE FUNCTION public.get_my_role()
+RETURNS text AS $$
+BEGIN
+  RETURN (SELECT role FROM public.profiles WHERE id = auth.uid());
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
-CREATE POLICY "Los usuarios pueden actualizar su propio perfil" 
-  ON public.profiles FOR UPDATE USING (auth.uid() = id);
+-- Función booleana rápida para verificar si es staff
+CREATE OR REPLACE FUNCTION public.is_staff()
+RETURNS boolean AS $$
+BEGIN
+  RETURN (SELECT role IN ('admin', 'superadmin', 'stylist') FROM public.profiles WHERE id = auth.uid());
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
-CREATE POLICY "Los administradores pueden ver todos los perfiles" 
-  ON public.profiles FOR SELECT USING (
-    EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin')
-  );
+-- Políticas para PERFILES (Optimizadas para evitar recursión infinita)
+DROP POLICY IF EXISTS "Lectura de perfiles" ON public.profiles;
+CREATE POLICY "Lectura de perfiles (propios)" 
+  ON public.profiles FOR SELECT USING (id = auth.uid());
 
-CREATE POLICY "Los administradores pueden actualizar cualquier perfil"
-  ON public.profiles FOR UPDATE USING (
-    EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin')
-  );
+CREATE POLICY "Lectura de perfiles (staff)" 
+  ON public.profiles FOR SELECT USING (get_my_role() IN ('admin', 'superadmin'));
+
+DROP POLICY IF EXISTS "Actualización de perfiles" ON public.profiles;
+CREATE POLICY "Actualización de perfiles (propios)" 
+  ON public.profiles FOR UPDATE USING (id = auth.uid());
+
+CREATE POLICY "Actualización de perfiles (staff)" 
+  ON public.profiles FOR UPDATE USING (get_my_role() IN ('admin', 'superadmin'));
+
+DROP POLICY IF EXISTS "Inserción de perfiles" ON public.profiles;
+CREATE POLICY "Inserción de perfiles"
+  ON public.profiles FOR INSERT WITH CHECK (true); -- Necesario para el registro inicial
 
 -- Políticas para SERVICIOS
+DROP POLICY IF EXISTS "Cualquiera puede ver los servicios activos" ON public.services;
 CREATE POLICY "Cualquiera puede ver los servicios activos" 
   ON public.services FOR SELECT USING (is_active = true);
 
+DROP POLICY IF EXISTS "Solo administradores pueden gestionar servicios" ON public.services;
 CREATE POLICY "Solo administradores pueden gestionar servicios" 
   ON public.services FOR ALL USING (
-    EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin')
+    get_my_role() IN ('admin', 'superadmin')
   );
 
 -- Políticas para CITAS
+DROP POLICY IF EXISTS "Los clientes pueden ver sus propias citas" ON public.appointments;
 CREATE POLICY "Los clientes pueden ver sus propias citas" 
   ON public.appointments FOR SELECT USING (auth.uid() = client_id);
 
+DROP POLICY IF EXISTS "Los clientes pueden crear sus propias citas" ON public.appointments;
 CREATE POLICY "Los clientes pueden crear sus propias citas" 
-  ON public.appointments FOR INSERT WITH CHECK (auth.uid() = client_id);
+  ON public.appointments FOR INSERT WITH CHECK (
+    auth.uid() = client_id OR 
+    get_my_role() IN ('admin', 'stylist', 'superadmin')
+  );
 
+DROP POLICY IF EXISTS "Los clientes pueden cancelar sus citas (si faltan > 24h)" ON public.appointments;
 CREATE POLICY "Los clientes pueden cancelar sus citas (si faltan > 24h)" 
   ON public.appointments FOR UPDATE USING (
-    auth.uid() = client_id AND 
-    status = 'pendiente' AND
-    appointment_date > (now() + interval '24 hours')
+    (auth.uid() = client_id AND status = 'pendiente' AND appointment_date > (now() + interval '24 hours')) OR
+    get_my_role() IN ('admin', 'stylist', 'superadmin')
   );
 
-CREATE POLICY "Admins y estilistas pueden ver todas las citas" 
-  ON public.appointments FOR SELECT USING (
-    EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role IN ('admin', 'stylist'))
-  );
+DROP POLICY IF EXISTS "Staff puede ver todas las citas" ON public.appointments;
+CREATE POLICY "Staff puede ver todas las citas" 
+  ON public.appointments FOR SELECT USING (is_staff());
 
-CREATE POLICY "Solo admins pueden marcar como pagado o completar" 
-  ON public.appointments FOR UPDATE USING (
-    EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin')
-  );
+DROP POLICY IF EXISTS "Staff puede gestionar estados y pagos" ON public.appointments;
+CREATE POLICY "Staff puede gestionar estados y pagos" 
+  ON public.appointments FOR UPDATE USING (is_staff());
+
+-- Función para que los clientes consulten disponibilidad de un estilista sin ver detalles de citas ajenas
+CREATE OR REPLACE FUNCTION public.get_busy_slots(p_stylist_id uuid, p_date date)
+RETURNS TABLE (appointment_date timestamp with time zone, duration_minutes int) AS $$
+BEGIN
+  RETURN QUERY
+  SELECT a.appointment_date, s.duration_minutes
+  FROM public.appointments a
+  JOIN public.services s ON a.service_id = s.id
+  WHERE a.stylist_id = p_stylist_id
+    AND a.appointment_date::date = p_date
+    AND a.status != 'cancelada';
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- ==========================================
 -- SINCRONIZACIÓN AUTOMÁTICA DE PERFILES
@@ -168,6 +217,7 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- Trigger para ejecutar la función al insertar en auth.users
 -- NOTA: Este trigger se aplica sobre el esquema auth de Supabase
+-- DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
 -- CREATE TRIGGER on_auth_user_created
 --   AFTER INSERT ON auth.users
 --   FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
@@ -183,6 +233,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS set_updated_at ON public.profiles;
 CREATE TRIGGER set_updated_at
   BEFORE UPDATE ON public.profiles
   FOR EACH ROW
@@ -191,11 +242,21 @@ CREATE TRIGGER set_updated_at
 -- ==========================================
 -- INSERTAR DATOS INICIALES (SERVICIOS)
 -- ==========================================
-INSERT INTO public.services (name, description, duration_minutes, price, category) VALUES
-('Corte de Cabello', 'Corte personalizado con lavado y secado incluido', 45, 350, 'Cabello'),
-('Tinte Completo', 'Aplicación de color completo con productos premium', 120, 1200, 'Cabello'),
-('Manicure Gel', 'Manicure con esmalte en gel de larga duración', 60, 450, 'Uñas'),
-('Facial Hidratante', 'Limpieza profunda e hidratación con productos naturales', 60, 800, 'Facial');
+INSERT INTO public.services (name, description, duration_minutes, price, category) 
+SELECT 'Corte de Cabello', 'Corte personalizado con lavado y secado incluido', 45, 350, 'Cabello'
+WHERE NOT EXISTS (SELECT 1 FROM public.services WHERE name = 'Corte de Cabello');
+
+INSERT INTO public.services (name, description, duration_minutes, price, category) 
+SELECT 'Tinte Completo', 'Aplicación de color completo con productos premium', 120, 1200, 'Cabello'
+WHERE NOT EXISTS (SELECT 1 FROM public.services WHERE name = 'Tinte Completo');
+
+INSERT INTO public.services (name, description, duration_minutes, price, category) 
+SELECT 'Manicure Gel', 'Manicure con esmalte en gel de larga duración', 60, 450, 'Uñas'
+WHERE NOT EXISTS (SELECT 1 FROM public.services WHERE name = 'Manicure Gel');
+
+INSERT INTO public.services (name, description, duration_minutes, price, category) 
+SELECT 'Facial Hidratante', 'Limpieza profunda e hidratación con productos naturales', 60, 800, 'Facial'
+WHERE NOT EXISTS (SELECT 1 FROM public.services WHERE name = 'Facial Hidratante');
 
 -- ==========================================
 -- STORAGE: BUCKETS Y POLÍTICAS
@@ -204,26 +265,29 @@ INSERT INTO storage.buckets (id, name, public)
 VALUES ('services_images', 'services_images', true)
 ON CONFLICT (id) DO NOTHING;
 
+DROP POLICY IF EXISTS "Imágenes de servicios públicas" ON storage.objects;
 CREATE POLICY "Imágenes de servicios públicas"
   ON storage.objects FOR SELECT USING (bucket_id = 'services_images');
 
-CREATE POLICY "Solo administradores pueden subir imágenes"
+DROP POLICY IF EXISTS "Solo administradores pueden gestionar imágenes" ON storage.objects;
+CREATE POLICY "Solo administradores pueden gestionar imágenes"
   ON storage.objects FOR INSERT WITH CHECK (
     bucket_id = 'services_images' AND 
-    EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin')
+    get_my_role() IN ('admin', 'superadmin')
   );
 
+DROP POLICY IF EXISTS "Solo administradores pueden eliminar imágenes" ON storage.objects;
 CREATE POLICY "Solo administradores pueden eliminar imágenes"
   ON storage.objects FOR DELETE USING (
     bucket_id = 'services_images' AND 
-    EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin')
+    get_my_role() IN ('admin', 'superadmin')
   );
 
 -- ==========================================
 -- INVENTARIO Y PUNTO DE VENTA (POS)
 -- ==========================================
 
-CREATE TABLE public.products (
+CREATE TABLE IF NOT EXISTS public.products (
   id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
   name text NOT NULL,
   description text,
@@ -237,21 +301,24 @@ CREATE TABLE public.products (
   updated_at timestamp with time zone DEFAULT now()
 );
 
+DROP TRIGGER IF EXISTS set_updated_at_products ON public.products;
 CREATE TRIGGER set_updated_at_products
   BEFORE UPDATE ON public.products
   FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
 
 ALTER TABLE public.products ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Cualquiera puede ver productos activos con stock" ON public.products;
 CREATE POLICY "Cualquiera puede ver productos activos con stock" 
   ON public.products FOR SELECT USING (is_active = true AND stock > 0);
 
+DROP POLICY IF EXISTS "Administradores pueden gestionar todo el inventario" ON public.products;
 CREATE POLICY "Administradores pueden gestionar todo el inventario" 
   ON public.products FOR ALL USING (
-    EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin')
+    get_my_role() IN ('admin', 'superadmin')
   );
 
-CREATE TABLE public.product_sales (
+CREATE TABLE IF NOT EXISTS public.product_sales (
   id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
   client_id uuid REFERENCES public.profiles(id),
   seller_id uuid REFERENCES public.profiles(id),
@@ -262,7 +329,7 @@ CREATE TABLE public.product_sales (
   created_at timestamp with time zone DEFAULT now()
 );
 
-CREATE TABLE public.sale_items (
+CREATE TABLE IF NOT EXISTS public.sale_items (
   id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
   sale_id uuid REFERENCES public.product_sales(id) ON DELETE CASCADE,
   product_id uuid REFERENCES public.products(id),
@@ -276,27 +343,33 @@ CREATE TABLE public.sale_items (
 ALTER TABLE public.product_sales ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.sale_items ENABLE ROW LEVEL SECURITY;
 
+-- Políticas para VENTAS
+DROP POLICY IF EXISTS "Cualquiera puede ver sus compras" ON public.product_sales;
 CREATE POLICY "Cualquiera puede ver sus compras" 
   ON public.product_sales FOR SELECT USING (client_id = auth.uid());
 
+DROP POLICY IF EXISTS "Vendedores/Admins pueden ver todas las ventas" ON public.product_sales;
 CREATE POLICY "Vendedores/Admins pueden ver todas las ventas" 
   ON public.product_sales FOR SELECT USING (
-    EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role IN ('admin', 'stylist'))
+    get_my_role() IN ('admin', 'stylist', 'superadmin')
   );
 
-CREATE POLICY "Solo administradores y cajeros insertan ventas"
+DROP POLICY IF EXISTS "Solo administradores y staff insertan ventas" ON public.product_sales;
+CREATE POLICY "Solo administradores y staff insertan ventas"
   ON public.product_sales FOR INSERT WITH CHECK (
-    EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role IN ('admin', 'stylist'))
+    get_my_role() IN ('admin', 'stylist', 'superadmin')
   );
 
+DROP POLICY IF EXISTS "Items de compras propias" ON public.sale_items;
 CREATE POLICY "Items de compras propias" 
   ON public.sale_items FOR SELECT USING (
     EXISTS (SELECT 1 FROM public.product_sales WHERE id = sale_id AND client_id = auth.uid())
   );
 
+DROP POLICY IF EXISTS "Items vistos y insertados por admin/staff" ON public.sale_items;
 CREATE POLICY "Items vistos y insertados por admin/staff" 
   ON public.sale_items FOR ALL USING (
-    EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role IN ('admin', 'stylist'))
+    get_my_role() IN ('admin', 'stylist', 'superadmin')
   );
 
 -- ==========================================

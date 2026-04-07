@@ -34,8 +34,8 @@ export default function DashboardView({ onNavigate, userId }: DashboardViewProps
         ]);
         setAppointments(appts);
         setServices(svcs);
-      } catch (err) {
-        console.error('Error al cargar datos del dashboard:', err);
+      } catch (err: any) {
+        console.error('Error detallado al cargar datos del dashboard:', err.message || err.details || err.hint || err);
       } finally {
         setLoading(false);
       }
@@ -44,7 +44,7 @@ export default function DashboardView({ onNavigate, userId }: DashboardViewProps
   }, [userId]);
 
   // Calculate stats from real data
-  const today = new Date().toISOString().split('T')[0];
+  const today = new Date().toLocaleDateString('sv');
   const stats: DashboardStats = {
     todayAppointments: appointments.filter(
       (a) => a.appointmentDate?.startsWith(today)
@@ -53,7 +53,7 @@ export default function DashboardView({ onNavigate, userId }: DashboardViewProps
     completedAppointments: appointments.filter((a) => a.status === 'completada').length,
     monthlyRevenue: appointments
       .filter((a) => a.status === 'completada' && a.isPaid)
-      .reduce((sum) => sum, 0),
+      .reduce((sum, a) => sum + (a.servicePrice || 0), 0),
     totalClients: new Set(appointments.map((a) => a.clientId)).size,
     popularService: services[0]?.name || '—',
   };
@@ -157,7 +157,7 @@ export default function DashboardView({ onNavigate, userId }: DashboardViewProps
               <h2 className={styles.cardTitle}>Servicios Populares</h2>
               <p className={styles.cardSubtitle}>Los más solicitados este mes</p>
             </div>
-            <Button variant="ghost" size="sm" onClick={() => onNavigate('services')}>
+            <Button variant="ghost" size="sm" onClick={() => onNavigate('book')}>
               Ver catálogo
             </Button>
           </div>

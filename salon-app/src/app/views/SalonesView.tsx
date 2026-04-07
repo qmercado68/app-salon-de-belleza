@@ -17,7 +17,7 @@ export default function SalonesView() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
-  const emptyForm = { name: '', slug: '', address: '', phone: '', email: '', themeColor: '#ec4899' };
+  const emptyForm = { name: '', nit: '', slug: '', address: '', phone: '', email: '', themeColor: '#ec4899' };
   const [form, setForm] = useState(emptyForm);
 
   useEffect(() => {
@@ -55,7 +55,10 @@ export default function SalonesView() {
   };
 
   const handleSave = async () => {
-    if (!form.name || !form.slug) return;
+    if (!form.name || !form.nit || !form.slug) {
+      setError('El nombre, NIT y slug son obligatorios.');
+      return;
+    }
     setSaving(true);
     setError(null);
     try {
@@ -78,6 +81,7 @@ export default function SalonesView() {
   const handleEdit = (salon: Salon) => {
     setForm({
       name: salon.name,
+      nit: salon.nit,
       slug: salon.slug,
       address: salon.address ?? '',
       phone: salon.phone ?? '',
@@ -136,6 +140,13 @@ export default function SalonesView() {
               onChange={(e) => handleNameChange(e.target.value)}
               placeholder="Ej: Estética Luna"
               icon={<Building2 size={16} />}
+            />
+            <Input
+              label="NIT / RUT (Obligatorio)"
+              value={form.nit}
+              onChange={(e) => setForm({ ...form, nit: e.target.value })}
+              placeholder="Ej: 900.123.456-7"
+              icon={<Globe size={16} />}
             />
             <Input
               label="Slug (URL)"
@@ -210,7 +221,11 @@ export default function SalonesView() {
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.75rem' }}>
                   <div>
                     <h3 style={{ margin: 0, fontWeight: 700, fontSize: '1rem' }}>{salon.name}</h3>
-                    <span style={{ fontSize: '0.75rem', color: '#9ca3af' }}>/{salon.slug}</span>
+                    <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                      <span style={{ fontSize: '0.75rem', color: '#9ca3af' }}>NIT: {salon.nit}</span>
+                      <span style={{ fontSize: '0.75rem', color: '#9ca3af' }}>•</span>
+                      <span style={{ fontSize: '0.75rem', color: '#9ca3af' }}>/{salon.slug}</span>
+                    </div>
                   </div>
                   <Badge variant={salon.isActive ? 'completada' : 'cancelada'}>
                     {salon.isActive ? 'Activo' : 'Inactivo'}

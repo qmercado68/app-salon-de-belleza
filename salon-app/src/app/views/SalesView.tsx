@@ -28,7 +28,7 @@ export default function SalesView({ userId }: SalesViewProps) {
     const loadTransactions = async () => {
       setLoading(true);
       try {
-        const today = new Date().toISOString().split('T')[0];
+        const today = new Date().toLocaleDateString('sv');
         const [transactions, dayReport] = await Promise.all([
           api.getDailyTransactions(today),
           api.getDailyReport(today),
@@ -48,7 +48,7 @@ export default function SalesView({ userId }: SalesViewProps) {
   const handleCloseCash = async () => {
     setLoading(true);
     try {
-      const today = new Date().toISOString().split('T')[0];
+      const today = new Date().toLocaleDateString('sv');
       const data = await api.getDailyReport(today);
       setReportData(data);
       setShowReport(true);

@@ -21,7 +21,7 @@ export default function InventoryView({ userId }: InventoryViewProps) {
   const [stockToUpdate, setStockToUpdate] = useState<{ id: string, name: string, current: number } | null>(null);
   const [addAmount, setAddAmount] = useState<number>(1);
   const [isBox, setIsBox] = useState(false);
-  const [stockArrivalDate, setStockArrivalDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [stockArrivalDate, setStockArrivalDate] = useState(() => new Date().toLocaleDateString('sv'));
   const [stockNewPrice, setStockNewPrice] = useState<number | ''>('');
   const [stockCostPrice, setStockCostPrice] = useState<number | ''>('');
   const [showNewProductModal, setShowNewProductModal] = useState(false);
@@ -81,7 +81,7 @@ export default function InventoryView({ userId }: InventoryViewProps) {
       setAddAmount(1);
       setStockNewPrice('');
       setStockCostPrice('');
-      setStockArrivalDate(new Date().toISOString().split('T')[0]);
+      setStockArrivalDate(new Date().toLocaleDateString('sv'));
       loadProducts();
     } catch (err) {
       alert('Error al actualizar el stock');

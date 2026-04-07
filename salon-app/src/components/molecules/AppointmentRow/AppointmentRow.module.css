@@ -31,7 +31,19 @@
 
 .client {
   font-size: var(--text-xs);
-  color: var(--neutral-500);
+  color: var(--neutral-600);
+  font-weight: 500;
+}
+
+.phoneLink {
+  font-size: 10px;
+  color: var(--primary-600);
+  text-decoration: none;
+  margin-top: 1px;
+}
+
+.phoneLink:hover {
+  text-decoration: underline;
 }
 
 .dateCol {

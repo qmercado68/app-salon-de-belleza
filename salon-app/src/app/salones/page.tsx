@@ -9,7 +9,7 @@ async function getSalons(): Promise<Salon[]> {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from('salons')
-    .select('id, name, slug, address, phone, logo_url, theme_color')
+    .select('id, name, nit, slug, address, phone, logo_url, theme_color')
     .eq('is_active', true)
     .order('name');
 
@@ -18,6 +18,7 @@ async function getSalons(): Promise<Salon[]> {
   return data.map((d: any) => ({
     id: d.id,
     name: d.name,
+    nit: d.nit,
     slug: d.slug,
     address: d.address,
     phone: d.phone,
