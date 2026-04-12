@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 // The client you created in Step 1
 import { createClient } from '@/utils/supabase/server'
+import { parseFullName } from '@/lib/name'
 
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url)
@@ -31,10 +32,17 @@ export async function GET(request: NextRequest) {
             .from('profiles')
             .select('id', { count: 'exact', head: true });
 
+          const derivedFullName = user.user_metadata?.full_name || user.email?.split('@')[0] || 'Nuevo Usuario';
+          const nameParts = parseFullName(derivedFullName);
+
           await supabase.from('profiles').insert({
             id: user.id,
             email: user.email,
-            full_name: user.user_metadata?.full_name || user.email?.split('@')[0] || 'Nuevo Usuario',
+            full_name: derivedFullName,
+            first_name: nameParts.firstName || null,
+            second_name: nameParts.secondName || null,
+            last_name: nameParts.lastName || null,
+            second_last_name: nameParts.secondLastName || null,
             role: (count === 0) ? 'admin' : 'client'
           })
         }

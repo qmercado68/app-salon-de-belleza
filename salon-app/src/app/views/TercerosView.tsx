@@ -6,6 +6,8 @@ import styles from './TercerosView.module.css';
 import Button from '@/components/atoms/Button/Button';
 import { api } from '@/lib/api';
 import { Tercero } from '@/lib/types';
+import { formatFullName, parseFullName } from '@/lib/name';
+import { CAPITAL_BY_DEPARTMENT, DEPARTMENT_OPTIONS, getCityOptionsForDepartment } from '@/lib/colombia';
 
 interface TercerosViewProps {
   userId?: string;
@@ -13,7 +15,10 @@ interface TercerosViewProps {
 
 const EMPTY_FORM = {
   nit: '',
-  nombre: '',
+  firstName: '',
+  secondName: '',
+  lastName: '',
+  secondLastName: '',
   direccion: '',
   telefono: '',
   departamento: '',
@@ -28,6 +33,7 @@ export default function TercerosView({ userId }: TercerosViewProps) {
   const [editing, setEditing] = useState<Tercero | null>(null);
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
+  const cityOptions = getCityOptionsForDepartment(form.departamento, form.ciudad);
 
   const loadTerceros = async () => {
     try {
@@ -52,10 +58,14 @@ export default function TercerosView({ userId }: TercerosViewProps) {
   };
 
   const openEdit = (t: Tercero) => {
+    const parsed = parseFullName(t.nombre);
     setEditing(t);
     setForm({
       nit: t.nit,
-      nombre: t.nombre,
+      firstName: t.firstName || parsed.firstName || '',
+      secondName: t.secondName || parsed.secondName || '',
+      lastName: t.lastName || parsed.lastName || '',
+      secondLastName: t.secondLastName || parsed.secondLastName || '',
       direccion: t.direccion || '',
       telefono: t.telefono || '',
       departamento: t.departamento || '',
@@ -65,10 +75,16 @@ export default function TercerosView({ userId }: TercerosViewProps) {
   };
 
   const handleSave = async () => {
-    if (!form.nit || !form.nombre) {
-      alert('NIT y Nombre son obligatorios.');
+    if (!form.nit || !form.firstName || !form.lastName) {
+      alert('NIT, Primer Nombre y Primer Apellido son obligatorios.');
       return;
     }
+    const displayName = formatFullName({
+      firstName: form.firstName,
+      secondName: form.secondName,
+      lastName: form.lastName,
+      secondLastName: form.secondLastName,
+    });
 
     // Validar duplicado por NIT
     const duplicado = terceros.find(t =>
@@ -82,9 +98,15 @@ export default function TercerosView({ userId }: TercerosViewProps) {
     try {
       setSaving(true);
       if (editing) {
-        await api.updateTercero(editing.id, form);
+        await api.updateTercero(editing.id, {
+          ...form,
+          nombre: displayName,
+        });
       } else {
-        await api.createTercero(form);
+        await api.createTercero({
+          ...form,
+          nombre: displayName,
+        });
       }
       setShowModal(false);
       setForm(EMPTY_FORM);
@@ -105,7 +127,13 @@ export default function TercerosView({ userId }: TercerosViewProps) {
   };
 
   const handleDelete = async (t: Tercero) => {
-    if (!confirm(`¿Eliminar a "${t.nombre}"?`)) return;
+    const displayName = formatFullName({
+      firstName: t.firstName,
+      secondName: t.secondName,
+      lastName: t.lastName,
+      secondLastName: t.secondLastName,
+    }) || t.nombre;
+    if (!confirm(`¿Eliminar a "${displayName}"?`)) return;
     try {
       await api.deleteTercero(t.id);
       loadTerceros();
@@ -115,11 +143,19 @@ export default function TercerosView({ userId }: TercerosViewProps) {
     }
   };
 
-  const filtered = terceros.filter(t =>
-    t.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    t.nit.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (t.ciudad || '').toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filtered = terceros.filter(t => {
+    const displayName = formatFullName({
+      firstName: t.firstName,
+      secondName: t.secondName,
+      lastName: t.lastName,
+      secondLastName: t.secondLastName,
+    }) || t.nombre;
+    return (
+      displayName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      t.nit.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (t.ciudad || '').toLowerCase().includes(searchTerm.toLowerCase())
+    );
+  });
 
   if (loading) return <div>Cargando terceros...</div>;
 
@@ -166,26 +202,35 @@ export default function TercerosView({ userId }: TercerosViewProps) {
               </tr>
             </thead>
             <tbody>
-              {filtered.map((t) => (
-                <tr key={t.id}>
-                  <td><strong>{t.nit}</strong></td>
-                  <td>{t.nombre}</td>
-                  <td>{t.telefono || '—'}</td>
-                  <td>{t.direccion || '—'}</td>
-                  <td>{t.departamento || '—'}</td>
-                  <td>{t.ciudad || '—'}</td>
-                  <td>
-                    <div className={styles.actions}>
-                      <Button variant="ghost" size="sm" icon={<Edit2 size={14} />} onClick={() => openEdit(t)}>
-                        Editar
-                      </Button>
-                      <Button variant="ghost" size="sm" icon={<Trash2 size={14} />} onClick={() => handleDelete(t)}>
-                        Eliminar
-                      </Button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
+              {filtered.map((t) => {
+                const displayName = formatFullName({
+                  firstName: t.firstName,
+                  secondName: t.secondName,
+                  lastName: t.lastName,
+                  secondLastName: t.secondLastName,
+                }) || t.nombre;
+
+                return (
+                  <tr key={t.id}>
+                    <td><strong>{t.nit}</strong></td>
+                    <td>{displayName}</td>
+                    <td>{t.telefono || '—'}</td>
+                    <td>{t.direccion || '—'}</td>
+                    <td>{t.departamento || '—'}</td>
+                    <td>{t.ciudad || '—'}</td>
+                    <td>
+                      <div className={styles.actions}>
+                        <Button variant="ghost" size="sm" icon={<Edit2 size={14} />} onClick={() => openEdit(t)}>
+                          Editar
+                        </Button>
+                        <Button variant="ghost" size="sm" icon={<Trash2 size={14} />} onClick={() => handleDelete(t)}>
+                          Eliminar
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -209,12 +254,42 @@ export default function TercerosView({ userId }: TercerosViewProps) {
               </div>
 
               <div className={styles.field}>
-                <label>Nombre *</label>
+                <label>Primer Nombre *</label>
                 <input
                   type="text"
-                  value={form.nombre}
-                  onChange={(e) => setForm({ ...form, nombre: e.target.value })}
-                  placeholder="Nombre o razón social"
+                  value={form.firstName}
+                  onChange={(e) => setForm({ ...form, firstName: e.target.value })}
+                  placeholder="Ej. Juan"
+                />
+              </div>
+
+              <div className={styles.field}>
+                <label>Segundo Nombre</label>
+                <input
+                  type="text"
+                  value={form.secondName}
+                  onChange={(e) => setForm({ ...form, secondName: e.target.value })}
+                  placeholder="Ej. Carlos"
+                />
+              </div>
+
+              <div className={styles.field}>
+                <label>Primer Apellido *</label>
+                <input
+                  type="text"
+                  value={form.lastName}
+                  onChange={(e) => setForm({ ...form, lastName: e.target.value })}
+                  placeholder="Ej. Pérez"
+                />
+              </div>
+
+              <div className={styles.field}>
+                <label>Segundo Apellido</label>
+                <input
+                  type="text"
+                  value={form.secondLastName}
+                  onChange={(e) => setForm({ ...form, secondLastName: e.target.value })}
+                  placeholder="Ej. Gómez"
                 />
               </div>
 
@@ -240,22 +315,35 @@ export default function TercerosView({ userId }: TercerosViewProps) {
 
               <div className={styles.field}>
                 <label>Departamento</label>
-                <input
-                  type="text"
+                <select
                   value={form.departamento}
-                  onChange={(e) => setForm({ ...form, departamento: e.target.value })}
-                  placeholder="Ej. Antioquia"
-                />
+                  onChange={(e) => {
+                    const departamento = e.target.value;
+                    const ciudad = CAPITAL_BY_DEPARTMENT[departamento] || '';
+                    setForm({ ...form, departamento, ciudad });
+                  }}
+                >
+                  <option value="">Selecciona departamento</option>
+                  {DEPARTMENT_OPTIONS.map((dep) => (
+                    <option key={dep} value={dep}>{dep}</option>
+                  ))}
+                </select>
               </div>
 
               <div className={styles.field}>
-                <label>Ciudad</label>
-                <input
-                  type="text"
+                <label>Ciudad (capital)</label>
+                <select
                   value={form.ciudad}
                   onChange={(e) => setForm({ ...form, ciudad: e.target.value })}
-                  placeholder="Ej. Medellín"
-                />
+                  disabled={!form.departamento}
+                >
+                  <option value="">
+                    {form.departamento ? 'Selecciona ciudad' : 'Selecciona departamento primero'}
+                  </option>
+                  {cityOptions.map((city) => (
+                    <option key={city} value={city}>{city}</option>
+                  ))}
+                </select>
               </div>
             </div>
 

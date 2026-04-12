@@ -6,7 +6,8 @@ import {
   mockCurrentUser,
   mockClients
 } from './mockData';
-import { Service, Appointment, Profile, Product, ProductSale, SaleItem, DailyReportSummary, Stylist, TimeSlot, Salon, Tercero } from './types';
+import { Service, Appointment, Profile, Product, ProductSale, SaleItem, DailyReportSummary, Stylist, TimeSlot, Salon, Tercero, StylistUnavailability, UserRole, StylistServiceReportFilters, StylistServiceReportRow, StylistServiceReportDetailRow, ProductSoldReportDetailRow, ProductSoldReportFilters } from './types';
+import { formatFullName, resolveNameParts } from './name';
 import { mockProducts, mockProductSales } from './mockData';
 
 // ==========================================
@@ -32,6 +33,15 @@ export const api = {
       name: d.name,
       nit: d.nit,
       slug: d.slug,
+      taxRegime: d.regimen_tributario,
+      dianResolution: d.dian_resolution,
+      invoiceRangeFrom: d.invoice_range_from,
+      invoiceRangeTo: d.invoice_range_to,
+      invoiceValidUntil: d.invoice_valid_until,
+      appliesVat: d.applies_vat,
+      vatPercentage: d.vat_percentage,
+      invoicePrefix: d.invoice_prefix,
+      invoiceNextNumber: d.invoice_next_number,
       address: d.address,
       phone: d.phone,
       email: d.email,
@@ -58,6 +68,15 @@ export const api = {
       name: data.name,
       nit: data.nit,
       slug: data.slug,
+      taxRegime: data.regimen_tributario,
+      dianResolution: data.dian_resolution,
+      invoiceRangeFrom: data.invoice_range_from,
+      invoiceRangeTo: data.invoice_range_to,
+      invoiceValidUntil: data.invoice_valid_until,
+      appliesVat: data.applies_vat,
+      vatPercentage: data.vat_percentage,
+      invoicePrefix: data.invoice_prefix,
+      invoiceNextNumber: data.invoice_next_number,
       address: data.address,
       phone: data.phone,
       email: data.email,
@@ -76,6 +95,15 @@ export const api = {
       name: salon.name,
       nit: salon.nit,
       slug: salon.slug,
+      regimen_tributario: salon.taxRegime ?? 'no_responsable_iva',
+      dian_resolution: salon.dianResolution ?? null,
+      invoice_range_from: salon.invoiceRangeFrom ?? 1,
+      invoice_range_to: salon.invoiceRangeTo ?? null,
+      invoice_valid_until: salon.invoiceValidUntil ?? null,
+      applies_vat: salon.appliesVat ?? false,
+      vat_percentage: salon.vatPercentage ?? 0,
+      invoice_prefix: salon.invoicePrefix ?? 'FV',
+      invoice_next_number: salon.invoiceNextNumber ?? 1,
       address: salon.address,
       phone: salon.phone,
       email: salon.email,
@@ -92,6 +120,15 @@ export const api = {
       name: data.name,
       nit: data.nit,
       slug: data.slug,
+      taxRegime: data.regimen_tributario,
+      dianResolution: data.dian_resolution,
+      invoiceRangeFrom: data.invoice_range_from,
+      invoiceRangeTo: data.invoice_range_to,
+      invoiceValidUntil: data.invoice_valid_until,
+      appliesVat: data.applies_vat,
+      vatPercentage: data.vat_percentage,
+      invoicePrefix: data.invoice_prefix,
+      invoiceNextNumber: data.invoice_next_number,
       address: data.address,
       phone: data.phone,
       email: data.email,
@@ -110,6 +147,15 @@ export const api = {
     if (salon.name !== undefined) payload.name = salon.name;
     if (salon.nit !== undefined) payload.nit = salon.nit;
     if (salon.slug !== undefined) payload.slug = salon.slug;
+    if (salon.taxRegime !== undefined) payload.regimen_tributario = salon.taxRegime;
+    if (salon.dianResolution !== undefined) payload.dian_resolution = salon.dianResolution || null;
+    if (salon.invoiceRangeFrom !== undefined) payload.invoice_range_from = salon.invoiceRangeFrom;
+    if (salon.invoiceRangeTo !== undefined) payload.invoice_range_to = salon.invoiceRangeTo;
+    if (salon.invoiceValidUntil !== undefined) payload.invoice_valid_until = salon.invoiceValidUntil;
+    if (salon.appliesVat !== undefined) payload.applies_vat = salon.appliesVat;
+    if (salon.vatPercentage !== undefined) payload.vat_percentage = salon.vatPercentage;
+    if (salon.invoicePrefix !== undefined) payload.invoice_prefix = salon.invoicePrefix;
+    if (salon.invoiceNextNumber !== undefined) payload.invoice_next_number = salon.invoiceNextNumber;
     if (salon.address !== undefined) payload.address = salon.address;
     if (salon.phone !== undefined) payload.phone = salon.phone;
     if (salon.email !== undefined) payload.email = salon.email;
@@ -165,6 +211,7 @@ export const api = {
       durationMinutes: d.duration_minutes,
       price: d.price,
       category: d.category,
+      taxTreatment: d.tax_treatment ?? 'gravado',
       imageUrl: d.image_url,
       isActive: d.is_active,
       salonId: d.salon_id,
@@ -185,6 +232,7 @@ export const api = {
       duration_minutes: service.durationMinutes,
       price: service.price,
       category: service.category,
+      tax_treatment: service.taxTreatment ?? 'gravado',
       image_url: service.imageUrl,
       is_active: service.isActive ?? true,
       salon_id: salonId ?? null,
@@ -199,6 +247,7 @@ export const api = {
       durationMinutes: data.duration_minutes,
       price: data.price,
       category: data.category,
+      taxTreatment: data.tax_treatment ?? 'gravado',
       imageUrl: data.image_url,
       isActive: data.is_active,
     } as Service;
@@ -213,6 +262,7 @@ export const api = {
     if (service.durationMinutes !== undefined) payload.duration_minutes = service.durationMinutes;
     if (service.price !== undefined) payload.price = service.price;
     if (service.category !== undefined) payload.category = service.category;
+    if (service.taxTreatment !== undefined) payload.tax_treatment = service.taxTreatment;
     if (service.imageUrl !== undefined) payload.image_url = service.imageUrl;
     if (service.isActive !== undefined) payload.is_active = service.isActive;
     if (service.salonId !== undefined) payload.salon_id = service.salonId || null;
@@ -238,7 +288,30 @@ export const api = {
   // PROFILES
   async getAllProfiles(): Promise<Profile[]> {
     if (!isSupabaseConfigured()) {
-      return mockClients;
+      return mockClients.map((client) => {
+        const nameParts = resolveNameParts({
+          firstName: client.firstName,
+          secondName: client.secondName,
+          lastName: client.lastName,
+          secondLastName: client.secondLastName,
+        }, client.fullName);
+        return {
+          ...client,
+          fullName: formatFullName(nameParts) || client.fullName,
+          firstName: nameParts.firstName || '',
+          secondName: nameParts.secondName || '',
+          lastName: nameParts.lastName || '',
+          secondLastName: nameParts.secondLastName || '',
+          department: client.department || '',
+          city: client.city || '',
+          isAvailable: client.isAvailable ?? true,
+          breakStartTime: client.breakStartTime,
+          breakEndTime: client.breakEndTime,
+          status: client.status || 'active',
+          terminatedAt: client.terminatedAt ?? null,
+          medicalFormRequested: client.medicalFormRequested ?? false,
+        } as Profile;
+      });
     }
 
     const { data, error } = await supabase
@@ -248,40 +321,91 @@ export const api = {
 
     if (error) throw error;
     
-    return (data as any[]).map((d) => ({
-      id: d.id,
-      fullName: d.full_name ?? '',
-      documentId: d.document_id ?? '',
-      birthDate: d.birth_date ?? '',
-      gender: d.gender ?? '',
-      email: d.email ?? '',
-      phone: d.phone ?? '',
-      address: d.address ?? '',
-      bloodType: d.blood_type ?? '',
-      medicalConditions: d.medical_conditions ?? '',
-      allergies: d.allergies ?? '',
-      role: d.role ?? 'client',
-      specialty: d.specialty ?? '',
-      avatarUrl: d.avatar_url ?? undefined,
-      salonId: d.salon_id ?? undefined,
-      createdAt: d.created_at ?? '',
-      workStartTime: d.work_start_time ? d.work_start_time.substring(0, 5) : undefined,
-      workEndTime: d.work_end_time ? d.work_end_time.substring(0, 5) : undefined,
-    })) as Profile[];
+    return (data as any[]).map((d) => {
+      const nameParts = resolveNameParts({
+        firstName: d.first_name,
+        secondName: d.second_name,
+        lastName: d.last_name,
+        secondLastName: d.second_last_name,
+      }, d.full_name);
+      const fullName = formatFullName(nameParts) || d.full_name || '';
+
+      return {
+        id: d.id,
+        fullName,
+        firstName: nameParts.firstName || '',
+        secondName: nameParts.secondName || '',
+        lastName: nameParts.lastName || '',
+        secondLastName: nameParts.secondLastName || '',
+        documentId: d.document_id ?? '',
+        birthDate: d.birth_date ?? '',
+        gender: d.gender ?? '',
+        email: d.email ?? '',
+        phone: d.phone ?? '',
+        address: d.address ?? '',
+        department: d.department ?? '',
+        city: d.city ?? '',
+        status: d.status ?? 'active',
+        terminatedAt: d.terminated_at ?? null,
+        isAvailable: (d.status ?? 'active') === 'active' ? (d.is_available ?? true) : false,
+        breakStartTime: d.break_start_time ? d.break_start_time.substring(0, 5) : undefined,
+        breakEndTime: d.break_end_time ? d.break_end_time.substring(0, 5) : undefined,
+        bloodType: d.blood_type ?? '',
+        medicalConditions: d.medical_conditions ?? '',
+        allergies: d.allergies ?? '',
+        medicalFormRequested: d.medical_form_requested ?? false,
+        role: d.role ?? 'client',
+        specialty: d.specialty ?? '',
+        avatarUrl: d.avatar_url ?? undefined,
+        salonId: d.salon_id ?? undefined,
+        createdAt: d.created_at ?? '',
+        workStartTime: d.work_start_time ? d.work_start_time.substring(0, 5) : undefined,
+        workEndTime: d.work_end_time ? d.work_end_time.substring(0, 5) : undefined,
+      } as Profile;
+    });
+  },
+
+  async inviteUser(payload: {
+    email: string;
+    role: UserRole;
+    firstName?: string;
+    secondName?: string;
+    lastName?: string;
+    secondLastName?: string;
+    salonId?: string;
+    phone?: string;
+  }): Promise<void> {
+    if (!isSupabaseConfigured()) {
+      console.log('Mock: Usuario invitado', payload);
+      return;
+    }
+
+    const { data, error } = await supabase.functions.invoke('create-user', {
+      body: payload,
+    });
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    if (data?.error) {
+      throw new Error(data.error);
+    }
   },
 
   async getStylists(userId?: string, salonId?: string): Promise<Stylist[]> {
     if (!isSupabaseConfigured()) {
       return [
-        { id: 'sty-1', name: 'Ana Rodríguez', specialty: 'Colorista Senior', description: 'Experta en balayage.', workStartTime: '09:00', workEndTime: '15:00' },
-        { id: 'sty-2', name: 'Carlos López', specialty: 'Estilista', description: 'Cortes modernos.', workStartTime: '12:00', workEndTime: '19:00' },
+        { id: 'sty-1', name: 'Ana Rodríguez', specialty: 'Colorista Senior', description: 'Experta en balayage.', workStartTime: '09:00', workEndTime: '15:00', breakStartTime: '12:00', breakEndTime: '13:00', isAvailable: true },
+        { id: 'sty-2', name: 'Carlos López', specialty: 'Estilista', description: 'Cortes modernos.', workStartTime: '12:00', workEndTime: '19:00', breakStartTime: '15:00', breakEndTime: '16:00', isAvailable: true },
       ];
     }
 
     let query = supabase
       .from('profiles')
-      .select('id, full_name, specialty, avatar_url, medical_conditions, work_start_time, work_end_time, salon_id')
+      .select('id, full_name, specialty, avatar_url, medical_conditions, work_start_time, work_end_time, break_start_time, break_end_time, is_available, salon_id, status')
       .eq('role', 'stylist')
+      .eq('status', 'active')
       .order('full_name', { ascending: true });
 
     if (salonId) {
@@ -305,11 +429,33 @@ export const api = {
       description: d.medical_conditions ?? '',
       workStartTime: d.work_start_time ? d.work_start_time.substring(0, 5) : '09:00', // Time comes as HH:mm:ss, convert to HH:mm
       workEndTime: d.work_end_time ? d.work_end_time.substring(0, 5) : '18:00',
+      breakStartTime: d.break_start_time ? d.break_start_time.substring(0, 5) : undefined,
+      breakEndTime: d.break_end_time ? d.break_end_time.substring(0, 5) : undefined,
+      isAvailable: (d.status ?? 'active') === 'active' ? (d.is_available ?? true) : false,
     })) as Stylist[];
   },
 
   async getProfile(userId: string): Promise<Profile> {
-    if (!isSupabaseConfigured()) return mockCurrentUser;
+    if (!isSupabaseConfigured()) {
+      const nameParts = resolveNameParts({
+        firstName: mockCurrentUser.firstName,
+        secondName: mockCurrentUser.secondName,
+        lastName: mockCurrentUser.lastName,
+        secondLastName: mockCurrentUser.secondLastName,
+      }, mockCurrentUser.fullName);
+      return {
+        ...mockCurrentUser,
+        fullName: formatFullName(nameParts) || mockCurrentUser.fullName,
+        firstName: nameParts.firstName || '',
+        secondName: nameParts.secondName || '',
+        lastName: nameParts.lastName || '',
+        secondLastName: nameParts.secondLastName || '',
+        isAvailable: mockCurrentUser.isAvailable ?? true,
+        breakStartTime: mockCurrentUser.breakStartTime,
+        breakEndTime: mockCurrentUser.breakEndTime,
+        medicalFormRequested: mockCurrentUser.medicalFormRequested ?? false,
+      } as Profile;
+    }
 
     const { data, error } = await supabase
       .from('profiles')
@@ -317,20 +463,66 @@ export const api = {
       .eq('id', userId)
       .single();
 
-    if (error) throw error;
+    if (error) {
+      if (error.code === 'PGRST116') {
+        // Record missing: return a skeleton profile based on auth user
+        const { data: { user } } = await supabase.auth.getUser();
+        const derivedFullName = user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'Usuario';
+        const nameParts = resolveNameParts({}, derivedFullName);
+        return {
+          id: userId,
+          fullName: formatFullName(nameParts) || derivedFullName,
+          firstName: nameParts.firstName || '',
+          secondName: nameParts.secondName || '',
+          lastName: nameParts.lastName || '',
+          secondLastName: nameParts.secondLastName || '',
+          email: user?.email || '',
+          department: '',
+          city: '',
+          isAvailable: true,
+          breakStartTime: undefined,
+          breakEndTime: undefined,
+          role: 'client', // Fallback role
+          status: 'active',
+          terminatedAt: null,
+          medicalFormRequested: false,
+          createdAt: new Date().toISOString(),
+        } as Profile;
+      }
+      throw error;
+    }
     const d = data as any;
+    const nameParts = resolveNameParts({
+      firstName: d.first_name,
+      secondName: d.second_name,
+      lastName: d.last_name,
+      secondLastName: d.second_last_name,
+    }, d.full_name);
+    const fullName = formatFullName(nameParts) || d.full_name || '';
     return {
       id: d.id,
-      fullName: d.full_name ?? '',
+      fullName,
+      firstName: nameParts.firstName || '',
+      secondName: nameParts.secondName || '',
+      lastName: nameParts.lastName || '',
+      secondLastName: nameParts.secondLastName || '',
       documentId: d.document_id ?? '',
       birthDate: d.birth_date ?? '',
       gender: d.gender ?? '',
       email: d.email ?? '',
       phone: d.phone ?? '',
       address: d.address ?? '',
+      department: d.department ?? '',
+      city: d.city ?? '',
+      status: d.status ?? 'active',
+      terminatedAt: d.terminated_at ?? null,
+      isAvailable: (d.status ?? 'active') === 'active' ? (d.is_available ?? true) : false,
+      breakStartTime: d.break_start_time ? d.break_start_time.substring(0, 5) : undefined,
+      breakEndTime: d.break_end_time ? d.break_end_time.substring(0, 5) : undefined,
       bloodType: d.blood_type ?? '',
       medicalConditions: d.medical_conditions ?? '',
       allergies: d.allergies ?? '',
+      medicalFormRequested: d.medical_form_requested ?? false,
       role: d.role ?? 'client',
       specialty: d.specialty ?? '',
       avatarUrl: d.avatar_url ?? undefined,
@@ -347,29 +539,105 @@ export const api = {
       return;
     }
 
+    if (!profile.id) {
+      throw new Error('Perfil sin id');
+    }
+
     const payload: any = {};
-    if (profile.fullName !== undefined) payload.full_name = profile.fullName;
+    const hasNameParts = [
+      profile.firstName,
+      profile.secondName,
+      profile.lastName,
+      profile.secondLastName,
+    ].some((value) => value !== undefined);
+
+    if (profile.fullName !== undefined) {
+      const trimmed = profile.fullName.trim();
+      if (trimmed) payload.full_name = trimmed;
+    }
+    if (profile.firstName !== undefined) payload.first_name = profile.firstName?.trim() || null;
+    if (profile.secondName !== undefined) payload.second_name = profile.secondName?.trim() || null;
+    if (profile.lastName !== undefined) payload.last_name = profile.lastName?.trim() || null;
+    if (profile.secondLastName !== undefined) payload.second_last_name = profile.secondLastName?.trim() || null;
     if (profile.documentId !== undefined) payload.document_id = profile.documentId;
     if (profile.birthDate !== undefined) payload.birth_date = profile.birthDate;
     if (profile.gender !== undefined) payload.gender = profile.gender || null;
     if (profile.phone !== undefined) payload.phone = profile.phone;
     if (profile.address !== undefined) payload.address = profile.address;
+    if (profile.department !== undefined) payload.department = profile.department || null;
+    if (profile.city !== undefined) payload.city = profile.city || null;
+    if (profile.isAvailable !== undefined) payload.is_available = profile.isAvailable;
+    if (profile.breakStartTime !== undefined) payload.break_start_time = profile.breakStartTime ? `${profile.breakStartTime}:00` : null;
+    if (profile.breakEndTime !== undefined) payload.break_end_time = profile.breakEndTime ? `${profile.breakEndTime}:00` : null;
+    if (profile.status !== undefined) payload.status = profile.status;
+    if (profile.status === 'active') {
+      payload.terminated_at = null;
+    }
+    if (profile.status === 'terminated' && profile.terminatedAt == null) {
+      payload.terminated_at = new Date().toISOString();
+    }
+    if (profile.status && profile.status !== 'active') {
+      payload.is_available = false;
+    }
     if (profile.bloodType !== undefined) payload.blood_type = profile.bloodType || null;
     if (profile.medicalConditions !== undefined) payload.medical_conditions = profile.medicalConditions;
     if (profile.allergies !== undefined) payload.allergies = profile.allergies;
+    if (profile.medicalFormRequested !== undefined) payload.medical_form_requested = profile.medicalFormRequested;
     if (profile.role !== undefined) payload.role = profile.role;
     if (profile.specialty !== undefined) payload.specialty = profile.specialty || null;
     if (profile.avatarUrl !== undefined) payload.avatar_url = profile.avatarUrl;
-    if (profile.salonId !== undefined) payload.salon_id = profile.salonId;
+    if (profile.salonId !== undefined) payload.salon_id = profile.salonId || null;
+    if (profile.status === 'terminated') payload.salon_id = null;
     if (profile.workStartTime !== undefined) payload.work_start_time = profile.workStartTime ? `${profile.workStartTime}:00` : null;
     if (profile.workEndTime !== undefined) payload.work_end_time = profile.workEndTime ? `${profile.workEndTime}:00` : null;
 
-    const { error } = await supabase
+    if (hasNameParts && payload.full_name === undefined) {
+      const computed = formatFullName({
+        firstName: profile.firstName,
+        secondName: profile.secondName,
+        lastName: profile.lastName,
+        secondLastName: profile.secondLastName,
+      });
+      if (computed) payload.full_name = computed;
+    }
+
+    if (Object.keys(payload).length === 0) return;
+
+    const { data: updatedRows, error: updateError } = await supabase
       .from('profiles')
       .update(payload)
-      .eq('id', profile.id);
+      .eq('id', profile.id)
+      .select('id');
 
-    if (error) throw error;
+    if (updateError) throw updateError;
+    if (updatedRows && updatedRows.length > 0) return;
+
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user || user.id !== profile.id) {
+      throw new Error('No se encontró el perfil para actualizar.');
+    }
+
+    const fullName = payload.full_name
+      || profile.fullName
+      || user.user_metadata?.full_name
+      || user.email?.split('@')[0]
+      || 'Usuario';
+    const email = profile.email || user.email || '';
+    const role = profile.role || 'client';
+
+    const insertPayload = {
+      id: profile.id,
+      ...payload,
+      full_name: fullName,
+      email,
+      role,
+    };
+
+    const { error: insertError } = await supabase
+      .from('profiles')
+      .insert(insertPayload);
+
+    if (insertError) throw insertError;
   },
 
   // APPOINTMENTS
@@ -384,7 +652,9 @@ export const api = {
         : mockAppointments;
     }
 
-    let query = supabase.from('appointments').select('*, services(name, price), profiles!client_id(full_name, allergies, phone), stylist:profiles!stylist_id(full_name), salons(name)');
+    let query = supabase
+      .from('appointments')
+      .select('*, services(name, price), profiles!client_id(full_name, allergies, medical_conditions, medical_form_requested, phone), stylist:profiles!stylist_id(full_name), salons(name)');
 
     if (userId) {
       const salonId = await api.getSalonId(userId);
@@ -413,6 +683,8 @@ export const api = {
       salonId: d.salon_id,
       salonName: d.salons?.name ?? '',
       allergies: d.profiles?.allergies ?? '',
+      medicalConditions: d.profiles?.medical_conditions ?? '',
+      medicalFormRequested: d.profiles?.medical_form_requested ?? false,
     })) as Appointment[];
   },
 
@@ -446,30 +718,74 @@ export const api = {
     if (error) throw error;
   },
 
-  async getAvailableTimeSlots(date: string, stylistId: string, durationMinutes: number, workStartTimeStr: string = '09:00', workEndTimeStr: string = '18:00'): Promise<TimeSlot[]> {
+  async getAvailableTimeSlots(
+    date: string,
+    stylistId: string,
+    durationMinutes: number,
+    workStartTimeStr: string = '09:00',
+    workEndTimeStr: string = '18:00',
+    breakStartTimeStr?: string,
+    breakEndTimeStr?: string,
+    isAvailable: boolean = true
+  ): Promise<TimeSlot[]> {
+    if (!isAvailable) return [];
+
+    const parseTimeToMinutes = (value?: string | null) => {
+      if (!value) return null;
+      const [h, m] = value.split(':').map(Number);
+      if (Number.isNaN(h) || Number.isNaN(m)) return null;
+      return h * 60 + m;
+    };
+
     const baseSlots: string[] = [];
     
     // Parse work bounds
-    const [startH, startM] = workStartTimeStr.split(':').map(Number);
-    const [endH, endM] = workEndTimeStr.split(':').map(Number);
-    const startTotalMins = (startH || 9) * 60 + (startM || 0);
-    const endTotalMins = (endH || 18) * 60 + (endM || 0);
+    const startTotalMins = parseTimeToMinutes(workStartTimeStr) ?? (9 * 60);
+    const endTotalMins = parseTimeToMinutes(workEndTimeStr) ?? (18 * 60);
+    if (endTotalMins <= startTotalMins) return [];
+
+    // Context for "Today" and current time
+    const now = new Date();
+    const todayStr = now.toLocaleDateString('sv'); // 'YYYY-MM-DD'
+    const isToday = date === todayStr;
+    const currentTotalMins = now.getHours() * 60 + now.getMinutes();
+    const gracePeriod = 30; // 30 minutes grace period for same-day bookings
 
     for (let currentMins = startTotalMins; currentMins < endTotalMins; currentMins += 30) {
+      // 1. Duración básica: ¿Cabe el servicio antes del cierre?
       if (currentMins + durationMinutes > endTotalMins) {
-        continue; // Don't allow scheduling if the service would finish after work ends
+        continue;
       }
+
+      // 2. Validación de Tiempo Real: Si es hoy, ¿estamos en el pasado o muy cerca?
+      if (isToday && currentMins < (currentTotalMins + gracePeriod)) {
+        continue;
+      }
+
       const h = Math.floor(currentMins / 60).toString().padStart(2, '0');
       const m = (currentMins % 60).toString().padStart(2, '0');
       baseSlots.push(`${h}:${m}`);
     }
 
-    if (!isSupabaseConfigured() || !stylistId) {
-      return baseSlots.map(time => ({ time, available: true }));
+    const occupiedRanges: { start: number; end: number }[] = [];
+
+    const breakStart = parseTimeToMinutes(breakStartTimeStr);
+    const breakEnd = parseTimeToMinutes(breakEndTimeStr);
+    if (breakStart !== null && breakEnd !== null && breakEnd > breakStart) {
+      occupiedRanges.push({ start: breakStart, end: breakEnd });
     }
 
-    const startOfDay = new Date(`${date}T00:00:00`).toISOString();
-    const endOfDay = new Date(`${date}T23:59:59.999`).toISOString();
+    if (!isSupabaseConfigured() || !stylistId) {
+      return baseSlots.map(time => {
+        const [h, m] = time.split(':').map(Number);
+        const slotStart = h * 60 + m;
+        const slotEnd = slotStart + durationMinutes;
+        const isOccupied = occupiedRanges.some(
+          (range) => slotStart < range.end && slotEnd > range.start
+        );
+        return { time, available: !isOccupied };
+      });
+    }
 
     // Cargar citas ocupadas usando el RPC seguro que ignora RLS
     const { data: appointments, error } = await supabase.rpc('get_busy_slots', {
@@ -483,12 +799,33 @@ export const api = {
     }
 
     // Parse each appointment into a start and end time (in minutes from midnight)
-    const occupiedRanges = (appointments || []).map((appt: any) => {
+    (appointments || []).forEach((appt: any) => {
       const d = new Date(appt.appointment_date);
       const startMins = d.getHours() * 60 + d.getMinutes();
       const dur = appt.duration_minutes || 30; // El RPC ya nos da la duración
-      return { start: startMins, end: startMins + dur };
+      occupiedRanges.push({ start: startMins, end: startMins + dur });
     });
+
+    const { data: unavailability, error: unavailabilityError } = await supabase
+      .from('stylist_unavailability')
+      .select('id, date, start_time, end_time, is_all_day')
+      .eq('stylist_id', stylistId)
+      .eq('date', date);
+
+    if (unavailabilityError) {
+      console.error('Error fetching unavailability:', unavailabilityError);
+    } else if (unavailability?.some((u: any) => u.is_all_day)) {
+      return [];
+    } else {
+      (unavailability || []).forEach((u: any) => {
+        if (!u.start_time || !u.end_time) return;
+        const startMins = parseTimeToMinutes(u.start_time);
+        const endMins = parseTimeToMinutes(u.end_time);
+        if (startMins !== null && endMins !== null && endMins > startMins) {
+          occupiedRanges.push({ start: startMins, end: endMins });
+        }
+      });
+    }
 
     return baseSlots.map(time => {
       const [h, m] = time.split(':').map(Number);
@@ -505,6 +842,94 @@ export const api = {
         available: !isOccupied
       };
     });
+  },
+
+  // STYLIST UNAVAILABILITY
+  async getStylistUnavailability(stylistId: string, date?: string): Promise<StylistUnavailability[]> {
+    if (!isSupabaseConfigured() || !stylistId) return [];
+
+    let query = supabase
+      .from('stylist_unavailability')
+      .select('*')
+      .eq('stylist_id', stylistId)
+      .order('date', { ascending: false });
+
+    if (date) {
+      query = query.eq('date', date);
+    }
+
+    const { data, error } = await query;
+    if (error) throw error;
+
+    return (data as any[]).map((d) => ({
+      id: d.id,
+      stylistId: d.stylist_id,
+      salonId: d.salon_id,
+      date: d.date,
+      startTime: d.start_time ? d.start_time.substring(0, 5) : null,
+      endTime: d.end_time ? d.end_time.substring(0, 5) : null,
+      isAllDay: d.is_all_day ?? true,
+      reason: d.reason ?? null,
+      createdAt: d.created_at,
+      createdBy: d.created_by,
+    })) as StylistUnavailability[];
+  },
+
+  async createStylistUnavailability(entry: {
+    stylistId: string;
+    date: string;
+    isAllDay: boolean;
+    startTime?: string | null;
+    endTime?: string | null;
+    reason?: string | null;
+  }): Promise<StylistUnavailability> {
+    if (!isSupabaseConfigured()) throw new Error('Supabase no está configurado');
+
+    const salonId = await api.getSalonId(entry.stylistId);
+    const { data: { user } } = await supabase.auth.getUser();
+
+    const payload: any = {
+      stylist_id: entry.stylistId,
+      salon_id: salonId,
+      date: entry.date,
+      is_all_day: entry.isAllDay,
+      start_time: entry.isAllDay ? null : (entry.startTime ? `${entry.startTime}:00` : null),
+      end_time: entry.isAllDay ? null : (entry.endTime ? `${entry.endTime}:00` : null),
+      reason: entry.reason || null,
+      created_by: user?.id || null,
+    };
+
+    const { data, error } = await supabase
+      .from('stylist_unavailability')
+      .insert(payload)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    return {
+      id: data.id,
+      stylistId: data.stylist_id,
+      salonId: data.salon_id,
+      date: data.date,
+      startTime: data.start_time ? data.start_time.substring(0, 5) : null,
+      endTime: data.end_time ? data.end_time.substring(0, 5) : null,
+      isAllDay: data.is_all_day ?? true,
+      reason: data.reason ?? null,
+      createdAt: data.created_at,
+      createdBy: data.created_by,
+    } as StylistUnavailability;
+  },
+
+  async deleteStylistUnavailability(id: string): Promise<void> {
+    if (!isSupabaseConfigured()) return;
+
+    const { error } = await supabase
+      .from('stylist_unavailability')
+      .delete()
+      .eq('id', id);
+
+    if (error) throw error;
   },
 
   // AVATAR / STORAGE
@@ -552,6 +977,26 @@ export const api = {
     return api.getServiceImageUrl(fileName);
   },
 
+  getProductImageUrl(path: string): string {
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+    return `${supabaseUrl}/storage/v1/object/public/products_images/${path}`;
+  },
+
+  async uploadProductImage(file: File): Promise<string> {
+    if (!isSupabaseConfigured()) throw new Error('Supabase no está configurado');
+
+    const ext = file.name.split('.').pop() || 'jpg';
+    const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}.${ext}`;
+
+    const { error } = await supabase.storage
+      .from('products_images')
+      .upload(fileName, file, { cacheControl: '3600', upsert: false });
+
+    if (error) throw new Error(`Error al subir imagen de producto: ${error.message}`);
+
+    return api.getProductImageUrl(fileName);
+  },
+
   async updateAppointmentStatus(id: string, status: string, isPaid?: boolean): Promise<void> {
     if (!isSupabaseConfigured()) {
       console.log(`Mock: Cita ${id} actualizada a ${status}, pagada: ${isPaid}`);
@@ -569,6 +1014,21 @@ export const api = {
     if (error) throw error;
   },
 
+  async deleteAppointment(id: string): Promise<void> {
+    if (!isSupabaseConfigured()) {
+      console.log(`Mock: Cita ${id} eliminada`);
+      return;
+    }
+
+    const { error } = await supabase
+      .from('appointments')
+      .delete()
+      .eq('id', id)
+      .eq('is_paid', false);
+
+    if (error) throw error;
+  },
+
   async getUnpaidAppointments(date: string): Promise<Appointment[]> {
     if (!isSupabaseConfigured()) {
       return mockAppointments.filter(a => 
@@ -581,7 +1041,7 @@ export const api = {
 
     const { data, error } = await supabase
       .from('appointments')
-      .select('*, services(name, price), profiles!client_id(full_name), stylist:profiles!stylist_id(full_name)')
+      .select('*, services(name, price, tax_treatment), profiles!client_id(full_name), stylist:profiles!stylist_id(full_name)')
       .eq('is_paid', false)
       .neq('status', 'cancelada')
       .gte('appointment_date', startOfDay)
@@ -595,6 +1055,7 @@ export const api = {
       serviceId: d.service_id,
       serviceName: d.services?.name ?? '',
       servicePrice: d.services?.price ?? 0,
+      serviceTaxTreatment: d.services?.tax_treatment ?? 'gravado',
       stylistId: d.stylist_id,
       stylistName: d.stylist?.full_name ?? 'Sin asignar', // Corrected join name
       appointmentDate: d.appointment_date,
@@ -610,7 +1071,10 @@ export const api = {
   async getProducts(userId?: string): Promise<Product[]> {
     if (!isSupabaseConfigured()) return mockProducts;
 
-    let query = supabase.from('products').select('*, terceros(id, nit, nombre)').order('name');
+    let query = supabase
+      .from('products')
+      .select('*, terceros(id, nit, nombre, first_name, second_name, last_name, second_last_name)')
+      .order('name');
 
     if (userId) {
       const salonId = await api.getSalonId(userId);
@@ -620,13 +1084,23 @@ export const api = {
     const { data, error } = await query;
     
     if (error) throw error;
-    return (data as any[]).map(d => ({
+    return (data as any[]).map(d => {
+      const terceroParts = resolveNameParts({
+        firstName: d.terceros?.first_name,
+        secondName: d.terceros?.second_name,
+        lastName: d.terceros?.last_name,
+        secondLastName: d.terceros?.second_last_name,
+      }, d.terceros?.nombre);
+      const terceroNombre = formatFullName(terceroParts) || d.terceros?.nombre;
+
+      return {
       id: d.id,
       name: d.name,
       description: d.description,
       price: d.price,
       stock: d.stock,
       category: d.category,
+      taxTreatment: d.tax_treatment ?? 'gravado',
       imageUrl: d.image_url,
       isActive: d.is_active,
       brand: d.brand,
@@ -640,9 +1114,10 @@ export const api = {
       purchaseDate: d.purchase_date,
       salonId: d.salon_id,
       terceroId: d.tercero_id,
-      terceroNombre: d.terceros?.nombre,
+      terceroNombre,
       terceroNit: d.terceros?.nit,
-    })) as Product[];
+      } as Product;
+    });
   },
 
   async updateProductStock(
@@ -690,6 +1165,7 @@ export const api = {
       price: product.price,
       stock: product.stock ?? 0,
       category: product.category,
+      tax_treatment: product.taxTreatment ?? 'gravado',
       image_url: product.imageUrl,
       is_active: product.isActive ?? true,
       brand: product.brand,
@@ -715,6 +1191,7 @@ export const api = {
       price: data.price,
       stock: data.stock,
       category: data.category,
+      taxTreatment: data.tax_treatment ?? 'gravado',
       imageUrl: data.image_url,
       isActive: data.is_active,
     } as Product;
@@ -732,6 +1209,7 @@ export const api = {
     if (product.price !== undefined) payload.price = product.price;
     if (product.stock !== undefined) payload.stock = product.stock;
     if (product.category !== undefined) payload.category = product.category;
+    if (product.taxTreatment !== undefined) payload.tax_treatment = product.taxTreatment;
     if (product.imageUrl !== undefined) payload.image_url = product.imageUrl;
     if (product.isActive !== undefined) payload.is_active = product.isActive;
     if (product.brand !== undefined) payload.brand = product.brand;
@@ -751,10 +1229,13 @@ export const api = {
   },
 
   // POS / SALES
-  async processSale(sale: Omit<ProductSale, 'id' | 'saleDate'>, userId?: string): Promise<string> {
+  async processSale(sale: Omit<ProductSale, 'id' | 'saleDate'>, userId?: string): Promise<{ saleId: string; invoiceNumber?: string }> {
     if (!isSupabaseConfigured()) {
       console.log('Mock: Venta procesada', sale);
-      return 'mock-sale-' + Date.now();
+      return {
+        saleId: 'mock-sale-' + Date.now(),
+        invoiceNumber: `FV-${Date.now().toString().slice(-6)}`,
+      };
     }
 
     let salonId: string | null = null;
@@ -774,12 +1255,27 @@ export const api = {
         appointment_id: item.appointmentId || null,
         quantity: item.quantity,
         unit_price: item.unitPrice,
+        discount_percentage: item.discountPercentage ?? 0,
+        tax_treatment: item.taxTreatment || 'gravado',
         name: item.productName || 'Servicio'
       }))
     });
 
     if (error) throw error;
-    return data as string;
+    const saleId = data as string;
+
+    const { data: saleData, error: saleReadError } = await supabase
+      .from('product_sales')
+      .select('invoice_number')
+      .eq('id', saleId)
+      .single();
+
+    if (saleReadError) throw saleReadError;
+
+    return {
+      saleId,
+      invoiceNumber: saleData?.invoice_number ?? undefined,
+    };
   },
 
   async getDailyReport(date: string): Promise<DailyReportSummary> {
@@ -833,14 +1329,14 @@ export const api = {
 
       s.sale_items.forEach((si: any) => {
         if (si.appointment_id) {
-          servicesTotal += si.unit_price * si.quantity;
+          servicesTotal += (si.line_total ?? (si.unit_price * si.quantity));
           appointmentsCount++;
           
           const name = si.appointments?.profiles?.full_name || 'Sin asignar';
           if (!stylistSales[name]) stylistSales[name] = { name, amount: 0 };
-          stylistSales[name].amount += si.unit_price * si.quantity;
+          stylistSales[name].amount += (si.line_total ?? (si.unit_price * si.quantity));
         } else {
-          productsTotal += si.unit_price * si.quantity;
+          productsTotal += (si.line_total ?? (si.unit_price * si.quantity));
           productsCount++;
         }
       });
@@ -903,18 +1399,334 @@ export const api = {
         const type = si.appointment_id ? 'Servicio' : 'Producto';
         transactions.push({
           id: s.id,
+          invoiceNumber: s.invoice_number ?? undefined,
           type,
           clientName: s.profiles?.full_name || 'Venta Directa',
           concept: si.appointment_id ? si.services?.name : (si.product_id ? 'Producto' : 'Venta'),
           date: s.created_at,
           paymentMethod: s.payment_method,
-          amount: si.unit_price * si.quantity,
+          amount: si.line_total ?? (si.unit_price * si.quantity),
+          discountAmount: Number(si.discount_amount || 0),
+          discountPercentage: Number(si.discount_percentage || 0),
+          taxTreatment: si.tax_treatment ?? 'gravado',
           status: 'Pagado'
         });
       });
     });
 
     return transactions.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  },
+
+  async getStylistServiceReport(filters: StylistServiceReportFilters, userId?: string): Promise<StylistServiceReportRow[]> {
+    const { startDate, endDate, status, includeClients = false } = filters;
+
+    if (!isSupabaseConfigured()) {
+      const inRange = (dateTime: string) => {
+        const dateOnly = dateTime.slice(0, 10);
+        return dateOnly >= startDate && dateOnly <= endDate;
+      };
+
+      const filtered = mockAppointments.filter((a) => {
+        if (!inRange(a.appointmentDate)) return false;
+        if (status === 'pagados') return a.isPaid === true && a.status !== 'cancelada';
+        if (status === 'cancelados') return a.status === 'cancelada';
+        return true;
+      });
+
+      const reportMap = new Map<string, StylistServiceReportRow>();
+      filtered.forEach((a) => {
+        const stylistName = a.stylistName || 'Sin asignar';
+        const service = mockServices.find((s) => s.id === a.serviceId);
+        const serviceName = a.serviceName || service?.name || 'Servicio';
+        const serviceId = a.serviceId || 'sin-servicio';
+        const amount = service?.price || a.servicePrice || 0;
+        const key = `${stylistName}__${serviceId}`;
+        const current: StylistServiceReportRow = reportMap.get(key) || {
+          stylistName,
+          serviceId,
+          serviceName,
+          appointmentsCount: 0,
+          totalAmount: 0,
+          clients: [] as string[],
+        };
+
+        current.appointmentsCount += 1;
+        current.totalAmount += amount;
+        if (includeClients && a.clientName && !current.clients?.includes(a.clientName)) {
+          current.clients?.push(a.clientName);
+        }
+        reportMap.set(key, current);
+      });
+
+      return Array.from(reportMap.values()).sort((a, b) => b.totalAmount - a.totalAmount);
+    }
+
+    const startIso = new Date(`${startDate}T00:00:00`).toISOString();
+    const endIso = new Date(`${endDate}T23:59:59.999`).toISOString();
+
+    let query = supabase
+      .from('appointments')
+      .select('id, service_id, is_paid, status, appointment_date, salon_id, services(name, price), stylist:profiles!stylist_id(id, full_name), client:profiles!client_id(full_name)')
+      .gte('appointment_date', startIso)
+      .lte('appointment_date', endIso)
+      .not('stylist_id', 'is', null);
+
+    if (status === 'pagados') {
+      query = query.eq('is_paid', true).neq('status', 'cancelada');
+    } else if (status === 'cancelados') {
+      query = query.eq('status', 'cancelada');
+    }
+
+    if (userId) {
+      const salonId = await api.getSalonId(userId);
+      if (salonId) query = query.eq('salon_id', salonId);
+    }
+
+    const { data, error } = await query;
+    if (error) throw error;
+
+    const reportMap = new Map<string, StylistServiceReportRow>();
+    (data as any[]).forEach((row) => {
+      const stylistId = row.stylist?.id as string | undefined;
+      const stylistName = row.stylist?.full_name || 'Sin asignar';
+      const serviceId = row.service_id || 'sin-servicio';
+      const serviceName = row.services?.name || 'Servicio';
+      const clientName = row.client?.full_name || '';
+      const amount = Number(row.services?.price || 0);
+      const key = `${stylistId || stylistName}__${serviceId}`;
+
+      const current: StylistServiceReportRow = reportMap.get(key) || {
+        stylistId,
+        stylistName,
+        serviceId,
+        serviceName,
+        appointmentsCount: 0,
+        totalAmount: 0,
+        clients: [] as string[],
+      };
+
+      current.appointmentsCount += 1;
+      current.totalAmount += amount;
+      if (includeClients && clientName && !current.clients?.includes(clientName)) {
+        current.clients?.push(clientName);
+      }
+      reportMap.set(key, current);
+    });
+
+    return Array.from(reportMap.values()).sort((a, b) => b.totalAmount - a.totalAmount);
+  },
+
+  async getStylistServiceReportDetails(filters: StylistServiceReportFilters, userId?: string): Promise<StylistServiceReportDetailRow[]> {
+    const { startDate, endDate, status } = filters;
+
+    const toTime = (value: string) => {
+      const d = new Date(value);
+      return d.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', hour12: false });
+    };
+
+    if (!isSupabaseConfigured()) {
+      const inRange = (dateTime: string) => {
+        const dateOnly = dateTime.slice(0, 10);
+        return dateOnly >= startDate && dateOnly <= endDate;
+      };
+
+      const filtered = mockAppointments.filter((a) => {
+        if (!inRange(a.appointmentDate)) return false;
+        if (status === 'pagados') return a.isPaid === true && a.status !== 'cancelada';
+        if (status === 'cancelados') return a.status === 'cancelada';
+        return true;
+      });
+
+      return filtered
+        .map((a) => {
+          const saleWithInvoice = mockProductSales.find((sale) =>
+            sale.items.some((item) => item.appointmentId === a.id)
+          );
+          const service = mockServices.find((s) => s.id === a.serviceId);
+          const saleItem = saleWithInvoice?.items.find((item) => item.appointmentId === a.id);
+          const mockDiscountPercentage = Number(saleItem?.discountPercentage || 0);
+          const baseAmount = service?.price || a.servicePrice || 0;
+          const mockDiscountAmount = Number((((baseAmount * mockDiscountPercentage) / 100).toFixed(2)));
+          const fullDate = new Date(a.appointmentDate);
+          return {
+            appointmentId: a.id,
+            invoiceNumber: saleWithInvoice?.invoiceNumber,
+            discountPercentage: mockDiscountPercentage,
+            discountAmount: mockDiscountAmount,
+            stylistId: a.stylistId,
+            stylistName: a.stylistName || 'Sin asignar',
+            serviceId: a.serviceId || 'sin-servicio',
+            serviceName: a.serviceName || service?.name || 'Servicio',
+            clientName: a.clientName || '',
+            appointmentDate: fullDate.toLocaleDateString('sv'),
+            appointmentTime: toTime(a.appointmentDate),
+            status: a.status,
+            isPaid: Boolean(a.isPaid),
+            amount: baseAmount - mockDiscountAmount,
+          } as StylistServiceReportDetailRow;
+        })
+        .sort((a, b) => `${b.appointmentDate} ${b.appointmentTime}`.localeCompare(`${a.appointmentDate} ${a.appointmentTime}`));
+    }
+
+    const startIso = new Date(`${startDate}T00:00:00`).toISOString();
+    const endIso = new Date(`${endDate}T23:59:59.999`).toISOString();
+
+    let query = supabase
+      .from('appointments')
+      .select('id, service_id, is_paid, status, appointment_date, salon_id, services(name, price), stylist:profiles!stylist_id(id, full_name), client:profiles!client_id(full_name)')
+      .gte('appointment_date', startIso)
+      .lte('appointment_date', endIso)
+      .not('stylist_id', 'is', null)
+      .order('appointment_date', { ascending: false });
+
+    if (status === 'pagados') {
+      query = query.eq('is_paid', true).neq('status', 'cancelada');
+    } else if (status === 'cancelados') {
+      query = query.eq('status', 'cancelada');
+    }
+
+    if (userId) {
+      const salonId = await api.getSalonId(userId);
+      if (salonId) query = query.eq('salon_id', salonId);
+    }
+
+    const { data, error } = await query;
+    if (error) throw error;
+
+    const appointmentIds = (data as any[]).map((row) => row.id).filter(Boolean);
+    const appointmentMetaById = new Map<string, { invoiceNumber?: string; discountPercentage: number; discountAmount: number }>();
+    if (appointmentIds.length > 0) {
+      const { data: saleItemsData, error: saleItemsError } = await supabase
+        .from('sale_items')
+        .select('appointment_id, discount_percentage, discount_amount, sale:product_sales!sale_id(invoice_number)')
+        .in('appointment_id', appointmentIds);
+
+      if (saleItemsError) throw saleItemsError;
+      (saleItemsData as any[]).forEach((item) => {
+        const appointmentId = item.appointment_id as string | undefined;
+        const invoiceNumber = item.sale?.invoice_number as string | undefined;
+        if (appointmentId && !appointmentMetaById.has(appointmentId)) {
+          appointmentMetaById.set(appointmentId, {
+            invoiceNumber,
+            discountPercentage: Number(item.discount_percentage || 0),
+            discountAmount: Number(item.discount_amount || 0),
+          });
+        }
+      });
+    }
+
+    return (data as any[]).map((row) => {
+      const appointmentDateRaw = row.appointment_date as string;
+      const dateObj = new Date(appointmentDateRaw);
+      const appointmentMeta = appointmentMetaById.get(row.id);
+      const discountPercentage = Number(appointmentMeta?.discountPercentage || 0);
+      const discountAmount = Number(appointmentMeta?.discountAmount || 0);
+      const grossAmount = Number(row.services?.price || 0);
+      return {
+        appointmentId: row.id,
+        invoiceNumber: appointmentMeta?.invoiceNumber,
+        discountPercentage,
+        discountAmount,
+        stylistId: row.stylist?.id as string | undefined,
+        stylistName: row.stylist?.full_name || 'Sin asignar',
+        serviceId: row.service_id || 'sin-servicio',
+        serviceName: row.services?.name || 'Servicio',
+        clientName: row.client?.full_name || '',
+        appointmentDate: dateObj.toLocaleDateString('sv'),
+        appointmentTime: toTime(appointmentDateRaw),
+        status: row.status,
+        isPaid: Boolean(row.is_paid),
+        amount: grossAmount - discountAmount,
+      } as StylistServiceReportDetailRow;
+    });
+  },
+
+  async getProductsSoldReportDetails(filters: ProductSoldReportFilters, userId?: string): Promise<ProductSoldReportDetailRow[]> {
+    const { startDate, endDate } = filters;
+    const toTime = (value: string) => {
+      const d = new Date(value);
+      return d.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', hour12: false });
+    };
+
+    if (!isSupabaseConfigured()) {
+      const inRange = (dateTime: string) => {
+        const dateOnly = dateTime.slice(0, 10);
+        return dateOnly >= startDate && dateOnly <= endDate;
+      };
+
+      return mockProductSales
+        .filter((sale) => inRange(sale.saleDate))
+        .flatMap((sale) => {
+          const saleDate = new Date(sale.saleDate);
+          return sale.items
+            .filter((item) => Boolean(item.productId))
+            .map((item) => ({
+              saleId: sale.id,
+              invoiceNumber: sale.invoiceNumber,
+              discountPercentage: Number(item.discountPercentage || 0),
+              discountAmount: Number(item.discountAmount || 0),
+              productId: item.productId,
+              productName: item.productName || 'Producto',
+              quantity: item.quantity,
+              unitPrice: item.unitPrice,
+              subtotal: item.subtotal,
+              saleDate: saleDate.toLocaleDateString('sv'),
+              saleTime: toTime(sale.saleDate),
+              paymentMethod: sale.paymentMethod,
+              status: 'completed',
+              sellerName: 'Administrador',
+              clientName: 'Venta Directa',
+            } as ProductSoldReportDetailRow));
+        })
+        .sort((a, b) => `${b.saleDate} ${b.saleTime}`.localeCompare(`${a.saleDate} ${a.saleTime}`));
+    }
+
+    const startIso = new Date(`${startDate}T00:00:00`).toISOString();
+    const endIso = new Date(`${endDate}T23:59:59.999`).toISOString();
+
+    let query = supabase
+      .from('product_sales')
+      .select('id, invoice_number, payment_method, status, created_at, salon_id, client:profiles!client_id(full_name), seller:profiles!seller_id(full_name), sale_items(quantity, unit_price, subtotal, discount_percentage, discount_amount, line_total, tax_treatment, product_id, products(name))')
+      .gte('created_at', startIso)
+      .lte('created_at', endIso)
+      .order('created_at', { ascending: false });
+
+    if (userId) {
+      const salonId = await api.getSalonId(userId);
+      if (salonId) query = query.eq('salon_id', salonId);
+    }
+
+    const { data, error } = await query;
+    if (error) throw error;
+
+    const rows: ProductSoldReportDetailRow[] = [];
+    (data as any[]).forEach((sale) => {
+      const saleDateRaw = sale.created_at as string;
+      const saleDateObj = new Date(saleDateRaw);
+      (sale.sale_items || []).forEach((item: any) => {
+        if (!item.product_id) return;
+        rows.push({
+          saleId: sale.id,
+          invoiceNumber: sale.invoice_number,
+          discountPercentage: Number(item.discount_percentage || 0),
+          discountAmount: Number(item.discount_amount || 0),
+          productId: item.product_id,
+          productName: item.products?.name || 'Producto',
+          quantity: Number(item.quantity || 0),
+          unitPrice: Number(item.unit_price || 0),
+          subtotal: Number(item.line_total || item.subtotal || (item.quantity || 0) * (item.unit_price || 0)),
+          taxTreatment: item.tax_treatment ?? 'gravado',
+          saleDate: saleDateObj.toLocaleDateString('sv'),
+          saleTime: toTime(saleDateRaw),
+          paymentMethod: sale.payment_method,
+          status: sale.status || 'completed',
+          sellerName: sale.seller?.full_name || 'Sin asignar',
+          clientName: sale.client?.full_name || 'Venta Directa',
+        });
+      });
+    });
+
+    return rows;
   },
 
   // ==========================================
@@ -930,25 +1742,51 @@ export const api = {
       .order('nombre');
 
     if (error) throw error;
-    return (data as any[]).map(d => ({
-      id: d.id,
-      nit: d.nit,
-      nombre: d.nombre,
-      direccion: d.direccion,
-      telefono: d.telefono,
-      departamento: d.departamento,
-      ciudad: d.ciudad,
-      isActive: d.is_active,
-      createdAt: d.created_at,
-    })) as Tercero[];
+    return (data as any[]).map(d => {
+      const nameParts = resolveNameParts({
+        firstName: d.first_name,
+        secondName: d.second_name,
+        lastName: d.last_name,
+        secondLastName: d.second_last_name,
+      }, d.nombre);
+      const nombre = formatFullName(nameParts) || d.nombre || '';
+
+      return {
+        id: d.id,
+        nit: d.nit,
+        nombre,
+        firstName: nameParts.firstName || '',
+        secondName: nameParts.secondName || '',
+        lastName: nameParts.lastName || '',
+        secondLastName: nameParts.secondLastName || '',
+        direccion: d.direccion,
+        telefono: d.telefono,
+        departamento: d.departamento,
+        ciudad: d.ciudad,
+        isActive: d.is_active,
+        createdAt: d.created_at,
+      } as Tercero;
+    });
   },
 
   async createTercero(tercero: Partial<Tercero>): Promise<Tercero> {
     if (!isSupabaseConfigured()) throw new Error('Supabase no configurado');
 
+    const nombre = tercero.nombre || formatFullName({
+      firstName: tercero.firstName,
+      secondName: tercero.secondName,
+      lastName: tercero.lastName,
+      secondLastName: tercero.secondLastName,
+    });
+    if (!nombre) throw new Error('Nombre del tercero requerido');
+
     const payload = {
       nit: tercero.nit,
-      nombre: tercero.nombre,
+      nombre,
+      first_name: tercero.firstName || null,
+      second_name: tercero.secondName || null,
+      last_name: tercero.lastName || null,
+      second_last_name: tercero.secondLastName || null,
       direccion: tercero.direccion || null,
       telefono: tercero.telefono || null,
       departamento: tercero.departamento || null,
@@ -961,6 +1799,10 @@ export const api = {
       id: data.id,
       nit: data.nit,
       nombre: data.nombre,
+      firstName: data.first_name ?? '',
+      secondName: data.second_name ?? '',
+      lastName: data.last_name ?? '',
+      secondLastName: data.second_last_name ?? '',
       direccion: data.direccion,
       telefono: data.telefono,
       departamento: data.departamento,
@@ -975,11 +1817,25 @@ export const api = {
 
     const payload: any = {};
     if (tercero.nit !== undefined) payload.nit = tercero.nit;
+    if (tercero.firstName !== undefined) payload.first_name = tercero.firstName || null;
+    if (tercero.secondName !== undefined) payload.second_name = tercero.secondName || null;
+    if (tercero.lastName !== undefined) payload.last_name = tercero.lastName || null;
+    if (tercero.secondLastName !== undefined) payload.second_last_name = tercero.secondLastName || null;
     if (tercero.nombre !== undefined) payload.nombre = tercero.nombre;
     if (tercero.direccion !== undefined) payload.direccion = tercero.direccion || null;
     if (tercero.telefono !== undefined) payload.telefono = tercero.telefono || null;
     if (tercero.departamento !== undefined) payload.departamento = tercero.departamento || null;
     if (tercero.ciudad !== undefined) payload.ciudad = tercero.ciudad || null;
+
+    if (tercero.nombre === undefined) {
+      const computedNombre = formatFullName({
+        firstName: tercero.firstName,
+        secondName: tercero.secondName,
+        lastName: tercero.lastName,
+        secondLastName: tercero.secondLastName,
+      });
+      if (computedNombre) payload.nombre = computedNombre;
+    }
 
     const { error } = await supabase.from('terceros').update(payload).eq('id', id);
     if (error) throw error;

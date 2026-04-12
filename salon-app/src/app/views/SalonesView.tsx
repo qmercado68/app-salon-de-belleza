@@ -7,7 +7,13 @@ import Badge from '@/components/atoms/Badge/Badge';
 import Button from '@/components/atoms/Button/Button';
 import Input from '@/components/atoms/Input/Input';
 import { api } from '@/lib/api';
-import { Salon } from '@/lib/types';
+import { Salon, SalonTaxRegime } from '@/lib/types';
+
+const TAX_REGIME_OPTIONS: Array<{ value: SalonTaxRegime; label: string }> = [
+  { value: 'responsable_iva', label: 'Responsable de IVA' },
+  { value: 'no_responsable_iva', label: 'No responsable de IVA' },
+  { value: 'simple', label: 'Régimen Simple (SIMPLE)' },
+];
 
 export default function SalonesView() {
   const [salons, setSalons] = useState<Salon[]>([]);
@@ -17,7 +23,24 @@ export default function SalonesView() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
-  const emptyForm = { name: '', nit: '', slug: '', address: '', phone: '', email: '', themeColor: '#ec4899' };
+  const emptyForm = {
+    name: '',
+    nit: '',
+    slug: '',
+    taxRegime: 'no_responsable_iva' as SalonTaxRegime,
+    dianResolution: '',
+    invoiceRangeFrom: 1,
+    invoiceRangeTo: '',
+    invoiceValidUntil: '',
+    appliesVat: false,
+    vatPercentage: 0,
+    invoicePrefix: 'FV',
+    invoiceNextNumber: 1,
+    address: '',
+    phone: '',
+    email: '',
+    themeColor: '#ec4899',
+  };
   const [form, setForm] = useState(emptyForm);
 
   useEffect(() => {
@@ -59,13 +82,46 @@ export default function SalonesView() {
       setError('El nombre, NIT y slug son obligatorios.');
       return;
     }
+    if (!form.invoicePrefix.trim()) {
+      setError('El prefijo de factura es obligatorio.');
+      return;
+    }
+    if (!Number.isInteger(form.invoiceNextNumber) || form.invoiceNextNumber < 1) {
+      setError('El consecutivo inicial debe ser un número mayor o igual a 1.');
+      return;
+    }
+    if (!Number.isInteger(form.invoiceRangeFrom) || form.invoiceRangeFrom < 1) {
+      setError('El rango desde debe ser un número mayor o igual a 1.');
+      return;
+    }
+    if (form.invoiceRangeTo !== '' && (!Number.isInteger(Number(form.invoiceRangeTo)) || Number(form.invoiceRangeTo) < form.invoiceRangeFrom)) {
+      setError('El rango hasta debe ser mayor o igual al rango desde.');
+      return;
+    }
+    if (form.invoiceNextNumber < form.invoiceRangeFrom) {
+      setError('El siguiente consecutivo no puede ser menor al rango desde.');
+      return;
+    }
+    if (form.invoiceRangeTo !== '' && form.invoiceNextNumber > Number(form.invoiceRangeTo)) {
+      setError('El siguiente consecutivo no puede superar el rango hasta.');
+      return;
+    }
+    if (form.appliesVat && (form.vatPercentage < 0 || form.vatPercentage > 100)) {
+      setError('El porcentaje de IVA debe estar entre 0 y 100.');
+      return;
+    }
     setSaving(true);
     setError(null);
     try {
+      const payload: Partial<Salon> = {
+        ...form,
+        invoiceRangeTo: form.invoiceRangeTo === '' ? null : Number(form.invoiceRangeTo),
+        invoiceValidUntil: form.invoiceValidUntil || null,
+      };
       if (editingId) {
-        await api.updateSalon(editingId, form);
+        await api.updateSalon(editingId, payload);
       } else {
-        await api.createSalon(form);
+        await api.createSalon(payload as Omit<Salon, 'id' | 'createdAt'>);
       }
       setShowForm(false);
       setEditingId(null);
@@ -83,6 +139,15 @@ export default function SalonesView() {
       name: salon.name,
       nit: salon.nit,
       slug: salon.slug,
+      taxRegime: salon.taxRegime ?? 'no_responsable_iva',
+      dianResolution: salon.dianResolution ?? '',
+      invoiceRangeFrom: salon.invoiceRangeFrom ?? 1,
+      invoiceRangeTo: salon.invoiceRangeTo != null ? String(salon.invoiceRangeTo) : '',
+      invoiceValidUntil: salon.invoiceValidUntil ?? '',
+      appliesVat: salon.appliesVat ?? false,
+      vatPercentage: salon.vatPercentage ?? 0,
+      invoicePrefix: salon.invoicePrefix ?? 'FV',
+      invoiceNextNumber: salon.invoiceNextNumber ?? 1,
       address: salon.address ?? '',
       phone: salon.phone ?? '',
       email: salon.email ?? '',
@@ -155,6 +220,94 @@ export default function SalonesView() {
               placeholder="estetica-luna"
               icon={<Globe size={16} />}
             />
+            <div>
+              <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, marginBottom: 4, color: '#374151' }}>
+                Régimen Tributario
+              </label>
+              <select
+                value={form.taxRegime}
+                onChange={(e) => setForm({ ...form, taxRegime: e.target.value as SalonTaxRegime })}
+                style={{
+                  width: '100%',
+                  border: '1px solid #d1d5db',
+                  borderRadius: 8,
+                  padding: '0.6rem 0.75rem',
+                  fontSize: '0.875rem',
+                }}
+              >
+                {TAX_REGIME_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <Input
+              label="Prefijo de factura"
+              value={form.invoicePrefix}
+              onChange={(e) => setForm({ ...form, invoicePrefix: e.target.value.toUpperCase().replace(/[^A-Z0-9-]/g, '') })}
+              placeholder="FV"
+            />
+            <Input
+              label="Resolución DIAN (opcional)"
+              value={form.dianResolution}
+              onChange={(e) => setForm({ ...form, dianResolution: e.target.value })}
+              placeholder="Ej: 18760000000001"
+            />
+            <Input
+              label="Rango desde"
+              type="number"
+              min={1}
+              value={String(form.invoiceRangeFrom)}
+              onChange={(e) => setForm({ ...form, invoiceRangeFrom: Number(e.target.value || 1) })}
+              placeholder="1"
+            />
+            <Input
+              label="Rango hasta (opcional)"
+              type="number"
+              min={1}
+              value={String(form.invoiceRangeTo)}
+              onChange={(e) => setForm({ ...form, invoiceRangeTo: e.target.value })}
+              placeholder="Ej: 500000"
+            />
+            <Input
+              label="Vigencia hasta (opcional)"
+              type="date"
+              value={form.invoiceValidUntil}
+              onChange={(e) => setForm({ ...form, invoiceValidUntil: e.target.value })}
+            />
+            <Input
+              label="Siguiente consecutivo"
+              type="number"
+              min={1}
+              value={String(form.invoiceNextNumber)}
+              onChange={(e) => setForm({ ...form, invoiceNextNumber: Number(e.target.value || 1) })}
+              placeholder="1"
+            />
+            <div>
+              <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, marginBottom: 4, color: '#374151' }}>
+                Impuesto IVA
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, fontSize: '0.875rem' }}>
+                <input
+                  type="checkbox"
+                  checked={form.appliesVat}
+                  onChange={(e) => setForm({ ...form, appliesVat: e.target.checked, vatPercentage: e.target.checked ? form.vatPercentage : 0 })}
+                />
+                Aplicar IVA en facturación
+              </label>
+              <Input
+                label="% IVA"
+                type="number"
+                min={0}
+                max={100}
+                step="0.01"
+                value={String(form.vatPercentage)}
+                onChange={(e) => setForm({ ...form, vatPercentage: Number(e.target.value || 0) })}
+                placeholder="19"
+                disabled={!form.appliesVat}
+              />
+            </div>
             <Input
               label="Dirección"
               value={form.address}
@@ -247,6 +400,32 @@ export default function SalonesView() {
                     <Mail size={12} /> {salon.email}
                   </p>
                 )}
+                {salon.taxRegime && (
+                  <p style={{ margin: '0.25rem 0', fontSize: '0.8rem', color: '#6b7280' }}>
+                    Régimen: {TAX_REGIME_OPTIONS.find((o) => o.value === salon.taxRegime)?.label ?? salon.taxRegime}
+                  </p>
+                )}
+                <p style={{ margin: '0.25rem 0', fontSize: '0.8rem', color: '#6b7280' }}>
+                  Facturación: {(salon.invoicePrefix ?? 'FV')}-{String(salon.invoiceNextNumber ?? 1).padStart(6, '0')}
+                </p>
+                {(salon.invoiceRangeFrom || salon.invoiceRangeTo) && (
+                  <p style={{ margin: '0.25rem 0', fontSize: '0.8rem', color: '#6b7280' }}>
+                    Rango DIAN: {String(salon.invoiceRangeFrom ?? 1).padStart(6, '0')} - {salon.invoiceRangeTo ? String(salon.invoiceRangeTo).padStart(6, '0') : 'Abierto'}
+                  </p>
+                )}
+                {salon.invoiceValidUntil && (
+                  <p style={{ margin: '0.25rem 0', fontSize: '0.8rem', color: '#6b7280' }}>
+                    Vigencia: {salon.invoiceValidUntil}
+                  </p>
+                )}
+                {salon.dianResolution && (
+                  <p style={{ margin: '0.25rem 0', fontSize: '0.8rem', color: '#6b7280' }}>
+                    Resolución DIAN: {salon.dianResolution}
+                  </p>
+                )}
+                <p style={{ margin: '0.25rem 0', fontSize: '0.8rem', color: '#6b7280' }}>
+                  IVA: {salon.appliesVat ? `${salon.vatPercentage ?? 0}%` : 'No aplica'}
+                </p>
 
                 <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1rem' }}>
                   <Button size="sm" variant="secondary" onClick={() => handleEdit(salon)} icon={<Pencil size={14} />}>

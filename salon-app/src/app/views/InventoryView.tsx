@@ -6,11 +6,18 @@ import styles from './InventoryView.module.css';
 import Card from '@/components/atoms/Card/Card';
 import Button from '@/components/atoms/Button/Button';
 import { api } from '@/lib/api';
-import { Product, Salon, Tercero } from '@/lib/types';
+import { Product, Salon, TaxTreatment, Tercero } from '@/lib/types';
+import { PRODUCT_IMAGE_LIMITS, validateImageFile } from '@/lib/imageValidation';
 
 interface InventoryViewProps {
   userId?: string;
 }
+
+const TAX_TREATMENT_OPTIONS: Array<{ value: TaxTreatment; label: string }> = [
+  { value: 'gravado', label: 'Gravado' },
+  { value: 'exento', label: 'Exento' },
+  { value: 'excluido', label: 'Excluido' },
+];
 
 export default function InventoryView({ userId }: InventoryViewProps) {
   const [products, setProducts] = useState<Product[]>([]);
@@ -27,23 +34,73 @@ export default function InventoryView({ userId }: InventoryViewProps) {
   const [showNewProductModal, setShowNewProductModal] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [savingEdit, setSavingEdit] = useState(false);
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const [updatingAvailabilityId, setUpdatingAvailabilityId] = useState<string | null>(null);
   const [newProduct, setNewProduct] = useState({
     name: '',
     description: '',
     price: 0,
     stock: 0,
     category: 'Cabello',
+    taxTreatment: 'gravado' as TaxTreatment,
     brand: '',
     unit: '',
     minStock: 0,
     maxStock: 0,
     terceroId: '',
   });
+  const [newProductImageFile, setNewProductImageFile] = useState<File | null>(null);
+  const [newProductImagePreview, setNewProductImagePreview] = useState<string | null>(null);
+  const [editProductImageFile, setEditProductImageFile] = useState<File | null>(null);
+  const [editProductImagePreview, setEditProductImagePreview] = useState<string | null>(null);
   const UNITS_PER_BOX = 12;
+
+  const resetNewProductForm = () => {
+    setNewProduct({
+      name: '',
+      description: '',
+      price: 0,
+      stock: 0,
+      category: 'Cabello',
+      taxTreatment: 'gravado' as TaxTreatment,
+      brand: '',
+      unit: '',
+      minStock: 0,
+      maxStock: 0,
+      terceroId: '',
+    });
+    setNewProductImageFile(null);
+    setPreview(null, setNewProductImagePreview);
+  };
+
+  const setPreview = (
+    next: string | null,
+    setter: React.Dispatch<React.SetStateAction<string | null>>
+  ) => {
+    setter((prev) => {
+      if (prev && prev.startsWith('blob:')) {
+        URL.revokeObjectURL(prev);
+      }
+      return next;
+    });
+  };
 
   useEffect(() => {
     loadProducts();
   }, []);
+
+  useEffect(() => {
+    if (!editingProduct) {
+      setPreview(null, setEditProductImagePreview);
+      setEditProductImageFile(null);
+      return;
+    }
+    if (editingProduct.imageUrl) {
+      setPreview(editingProduct.imageUrl, setEditProductImagePreview);
+    } else {
+      setPreview(null, setEditProductImagePreview);
+    }
+  }, [editingProduct]);
 
   const loadProducts = async () => {
     try {
@@ -95,23 +152,19 @@ export default function InventoryView({ userId }: InventoryViewProps) {
     }
 
     try {
-      await api.createProduct(newProduct, userId);
+      let imageUrl: string | undefined;
+      if (newProductImageFile) {
+        setUploadingImage(true);
+        imageUrl = await api.uploadProductImage(newProductImageFile);
+      }
+      await api.createProduct({ ...newProduct, imageUrl }, userId);
       setShowNewProductModal(false);
-      setNewProduct({
-        name: '',
-        description: '',
-        price: 0,
-        stock: 0,
-        category: 'Cabello',
-        brand: '',
-        unit: '',
-        minStock: 0,
-        maxStock: 0,
-        terceroId: '',
-      });
+      resetNewProductForm();
       loadProducts();
     } catch (err) {
       alert('Error al crear el producto');
+    } finally {
+      setUploadingImage(false);
     }
   };
 
@@ -119,13 +172,59 @@ export default function InventoryView({ userId }: InventoryViewProps) {
     if (!editingProduct) return;
     try {
       setSavingEdit(true);
-      await api.updateProduct(editingProduct.id, editingProduct);
+      let imageUrl = editingProduct.imageUrl;
+      if (editProductImageFile) {
+        setUploadingImage(true);
+        imageUrl = await api.uploadProductImage(editProductImageFile);
+      }
+      await api.updateProduct(editingProduct.id, { ...editingProduct, imageUrl });
       setEditingProduct(null);
       loadProducts();
     } catch (err) {
       alert('Error al guardar cambios');
     } finally {
       setSavingEdit(false);
+      setUploadingImage(false);
+      setEditProductImageFile(null);
+    }
+  };
+
+  const handleNewImageChange = async (file?: File) => {
+    if (!file) return;
+    const validationError = await validateImageFile(file, PRODUCT_IMAGE_LIMITS);
+    if (validationError) {
+      alert(validationError);
+      setNewProductImageFile(null);
+      setPreview(null, setNewProductImagePreview);
+      return;
+    }
+    setNewProductImageFile(file);
+    setPreview(URL.createObjectURL(file), setNewProductImagePreview);
+  };
+
+  const handleEditImageChange = async (file?: File) => {
+    if (!file) return;
+    const validationError = await validateImageFile(file, PRODUCT_IMAGE_LIMITS);
+    if (validationError) {
+      alert(validationError);
+      setEditProductImageFile(null);
+      setPreview(editingProduct?.imageUrl ?? null, setEditProductImagePreview);
+      return;
+    }
+    setEditProductImageFile(file);
+    setPreview(URL.createObjectURL(file), setEditProductImagePreview);
+  };
+
+  const handleToggleAvailability = async (product: Product) => {
+    const nextIsActive = product.isActive === false;
+    try {
+      setUpdatingAvailabilityId(product.id);
+      await api.updateProduct(product.id, { isActive: nextIsActive });
+      setProducts((prev) => prev.map(p => p.id === product.id ? { ...p, isActive: nextIsActive } : p));
+    } catch (err) {
+      alert('No se pudo actualizar la disponibilidad del producto.');
+    } finally {
+      setUpdatingAvailabilityId(null);
     }
   };
 
@@ -144,11 +243,28 @@ export default function InventoryView({ userId }: InventoryViewProps) {
       </div>
 
       <div className={styles.inventoryGrid}>
-        {products.map((product) => (
-          <Card key={product.id} className={`${styles.productCard} ${product.stock <= (product.minStock || 0) ? styles.outOfStockAlert : ''}`}>
+        {products.map((product) => {
+          const isUnavailable = product.isActive === false;
+          return (
+          <Card
+            key={product.id}
+            className={`${styles.productCard} ${product.stock <= (product.minStock || 0) ? styles.outOfStockAlert : ''} ${isUnavailable ? styles.unavailableCard : ''}`}
+          >
             {product.stock <= (product.minStock || 0) && (
               <div className={styles.alertRibbon}>Stock Bajo</div>
             )}
+            {isUnavailable && (
+              <div className={styles.unavailableBadge}>No disponible</div>
+            )}
+            <div className={styles.productImageWrap}>
+              {product.imageUrl ? (
+                <img src={product.imageUrl} alt={product.name} className={styles.productImage} />
+              ) : (
+                <div className={styles.productImagePlaceholder}>
+                  <Package size={48} />
+                </div>
+              )}
+            </div>
             <div className={styles.productHeader}>
               <div>
                 <h3 className={styles.productTitle}>{product.name}</h3>
@@ -168,6 +284,9 @@ export default function InventoryView({ userId }: InventoryViewProps) {
                   {product.terceroNit && <span> (NIT: {product.terceroNit})</span>}
                 </div>
               )}
+              <div className={styles.supplierInfo}>
+                <strong>Tratamiento IVA:</strong> {TAX_TREATMENT_OPTIONS.find((o) => o.value === (product.taxTreatment || 'gravado'))?.label || 'Gravado'}
+              </div>
             </div>
 
             <div className={styles.productMeta}>
@@ -177,22 +296,40 @@ export default function InventoryView({ userId }: InventoryViewProps) {
               </div>
               <span className={styles.categoryTag}>{product.category}</span>
             </div>
-            <div style={{ marginTop: '1.25rem', display: 'flex', gap: '0.75rem' }}>
+            <div className={styles.productActions}>
               <Button 
                 variant="outline" 
                 size="sm" 
-                fullWidth 
                 icon={<PlusCircle size={16} />}
                 onClick={() => setStockToUpdate({ id: product.id, name: product.name, current: product.stock })}
               >
                 Cargar Stock
               </Button>
-              <Button variant="ghost" size="sm" icon={<Edit2 size={16} />} onClick={() => setEditingProduct(product)}>
+              <Button
+                variant="ghost"
+                size="sm"
+                icon={<Edit2 size={16} />}
+                onClick={() => setEditingProduct(product)}
+              >
                 Editar
+              </Button>
+              <Button
+                variant={isUnavailable ? 'secondary' : 'danger'}
+                size="sm"
+                className={styles.fullWidthAction}
+                onClick={() => handleToggleAvailability(product)}
+                disabled={updatingAvailabilityId === product.id}
+              >
+                {updatingAvailabilityId === product.id
+                  ? 'Actualizando...'
+                  : isUnavailable
+                    ? 'Marcar disponible'
+                    : 'No disponible'}
               </Button>
             </div>
           </Card>
-        ))}
+        );
+        })}
       </div>
 
       {stockToUpdate && (
@@ -295,6 +432,22 @@ export default function InventoryView({ userId }: InventoryViewProps) {
                 />
               </div>
 
+              <div className={`${styles.field} ${styles.fullWidth}`}>
+                <label>Imagen del Producto</label>
+                {newProductImagePreview && (
+                  <img
+                    src={newProductImagePreview}
+                    alt="Vista previa del producto"
+                    className={styles.imagePreview}
+                  />
+                )}
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => handleNewImageChange(e.target.files?.[0])}
+                />
+              </div>
+
               <div className={styles.field}>
                 <label>Marca</label>
                 <input 
@@ -316,6 +469,18 @@ export default function InventoryView({ userId }: InventoryViewProps) {
                   <option value="Facial">Facial</option>
                   <option value="Maquillaje">Maquillaje</option>
                   <option value="Otros">Otros</option>
+                </select>
+              </div>
+
+              <div className={styles.field}>
+                <label>Tratamiento IVA</label>
+                <select
+                  value={(newProduct as any).taxTreatment || 'gravado'}
+                  onChange={(e) => setNewProduct({ ...newProduct, taxTreatment: e.target.value as TaxTreatment } as any)}
+                >
+                  {TAX_TREATMENT_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
                 </select>
               </div>
 
@@ -421,9 +586,13 @@ export default function InventoryView({ userId }: InventoryViewProps) {
               </div>
             </div>
 
-            <div className={styles.modalActions}>
-              <Button variant="ghost" onClick={() => setShowNewProductModal(false)}>Cancelar</Button>
-              <Button onClick={handleCreateProduct}>Guardar Producto</Button>
+              <div className={styles.modalActions}>
+              <Button variant="ghost" onClick={() => { setShowNewProductModal(false); resetNewProductForm(); }}>
+                Cancelar
+              </Button>
+              <Button onClick={handleCreateProduct} disabled={uploadingImage}>
+                {uploadingImage ? 'Subiendo imagen...' : 'Guardar Producto'}
+              </Button>
             </div>
           </div>
         </div>
@@ -442,6 +611,22 @@ export default function InventoryView({ userId }: InventoryViewProps) {
                   type="text"
                   value={editingProduct.name}
                   onChange={(e) => setEditingProduct({...editingProduct, name: e.target.value})}
+                />
+              </div>
+
+              <div className={`${styles.field} ${styles.fullWidth}`}>
+                <label>Imagen del Producto</label>
+                {editProductImagePreview && (
+                  <img
+                    src={editProductImagePreview}
+                    alt="Vista previa del producto"
+                    className={styles.imagePreview}
+                  />
+                )}
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => handleEditImageChange(e.target.files?.[0])}
                 />
               </div>
 
@@ -465,6 +650,18 @@ export default function InventoryView({ userId }: InventoryViewProps) {
                   <option value="Facial">Facial</option>
                   <option value="Maquillaje">Maquillaje</option>
                   <option value="Otros">Otros</option>
+                </select>
+              </div>
+
+              <div className={styles.field}>
+                <label>Tratamiento IVA</label>
+                <select
+                  value={editingProduct.taxTreatment || 'gravado'}
+                  onChange={(e) => setEditingProduct({ ...editingProduct, taxTreatment: e.target.value as TaxTreatment })}
+                >
+                  {TAX_TREATMENT_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
                 </select>
               </div>
 
@@ -561,8 +758,8 @@ export default function InventoryView({ userId }: InventoryViewProps) {
 
             <div className={styles.modalActions}>
               <Button variant="ghost" onClick={() => setEditingProduct(null)}>Cancelar</Button>
-              <Button onClick={handleSaveEdit} disabled={savingEdit}>
-                {savingEdit ? 'Guardando...' : 'Guardar Cambios'}
+              <Button onClick={handleSaveEdit} disabled={savingEdit || uploadingImage}>
+                {uploadingImage ? 'Subiendo imagen...' : savingEdit ? 'Guardando...' : 'Guardar Cambios'}
               </Button>
             </div>
           </div>

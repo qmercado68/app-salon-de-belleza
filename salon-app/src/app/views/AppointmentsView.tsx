@@ -23,6 +23,7 @@ export default function AppointmentsView({ userId, role }: AppointmentsViewProps
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   // Advanced Filters State
   const [searchTerm, setSearchTerm] = useState('');
@@ -35,12 +36,14 @@ export default function AppointmentsView({ userId, role }: AppointmentsViewProps
       try {
         setLoading(true);
         setError(null);
-        // Admin: todas las citas del salón; Cliente: solo sus propias citas
-        const isStaff = role === 'admin' || role === 'superadmin';
-        const data = isStaff
+        const canViewStaffAppointments = role === 'admin' || role === 'superadmin' || role === 'stylist';
+        const data = canViewStaffAppointments
           ? await api.getAppointments(undefined, userId)
           : await api.getAppointments(userId, userId);
-        setAppointments(data);
+        const filtered = role === 'stylist' && userId
+          ? data.filter((apt) => apt.stylistId === userId)
+          : data;
+        setAppointments(filtered);
       } catch (err) {
         console.error('Error al cargar citas:', err);
         setError('No se pudieron cargar las citas.');
@@ -60,6 +63,16 @@ export default function AppointmentsView({ userId, role }: AppointmentsViewProps
   ];
 
   const isStaff = role === 'admin' || role === 'superadmin';
+  const showMedicalAlert = role === 'admin' || role === 'superadmin' || role === 'stylist';
+  const deleteThreshold = Date.now() + (24 * 60 * 60 * 1000);
+
+  const canDeleteAppointment = (appointment: Appointment) => {
+    if (appointment.isPaid) return false;
+    if (appointment.status === 'cancelada' || appointment.status === 'completada') return false;
+    if (isStaff) return true;
+    const appointmentTime = new Date(appointment.appointmentDate).getTime();
+    return appointmentTime > deleteThreshold;
+  };
 
   // Extract unique services and stylists for the filter dropdowns
   const availableServices = useMemo(() => {
@@ -104,6 +117,23 @@ export default function AppointmentsView({ userId, role }: AppointmentsViewProps
     setAppointments((prev) =>
       prev.map((a) => (a.id === id ? { ...a, status: 'cancelada' as AppointmentStatus } : a))
     );
+  };
+
+  const handleDelete = async (id: string) => {
+    const target = appointments.find((apt) => apt.id === id);
+    if (!target || !canDeleteAppointment(target)) return;
+    if (!window.confirm('¿Eliminar esta cita? Esta acción no se puede deshacer.')) return;
+
+    try {
+      setDeletingId(id);
+      setError(null);
+      await api.deleteAppointment(id);
+      setAppointments((prev) => prev.filter((a) => a.id !== id));
+    } catch (err) {
+      setError('No se pudo eliminar la cita. Intenta de nuevo.');
+    } finally {
+      setDeletingId(null);
+    }
   };
 
   if (loading) {
@@ -222,6 +252,9 @@ export default function AppointmentsView({ userId, role }: AppointmentsViewProps
                     appointment={apt}
                     showClient
                     onCancel={handleCancel}
+                    onDelete={deletingId ? undefined : handleDelete}
+                    canDelete={canDeleteAppointment(apt)}
+                    showMedicalAlert={showMedicalAlert}
                   />
                 ))}
               </div>
@@ -244,6 +277,9 @@ export default function AppointmentsView({ userId, role }: AppointmentsViewProps
                 appointment={apt}
                 showClient
                 onCancel={handleCancel}
+                onDelete={deletingId ? undefined : handleDelete}
+                canDelete={canDeleteAppointment(apt)}
+                showMedicalAlert={showMedicalAlert}
               />
             ))}
           </div>

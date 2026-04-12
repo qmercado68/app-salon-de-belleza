@@ -8,7 +8,6 @@ import BookView from './views/BookView';
 import ProfileView from './views/ProfileView';
 import AdminView from './views/AdminView';
 import ReportsView from './views/ReportsView';
-import SalesView from './views/SalesView';
 import InventoryView from './views/InventoryView';
 import UsersView from './views/UsersView';
 import AdminServicesView from './views/AdminServicesView';
@@ -20,7 +19,7 @@ import { supabase } from '@/lib/supabase';
 import { api } from '@/lib/api';
 import { Profile } from '@/lib/types';
 
-type ViewId = 'login' | 'dashboard' | 'appointments' | 'book' | 'profile' | 'admin' | 'reports' | 'sales' | 'inventory' | 'users' | 'admin-services' | 'pos' | 'salones' | 'terceros';
+type ViewId = 'login' | 'dashboard' | 'appointments' | 'book' | 'profile' | 'admin' | 'reports' | 'inventory' | 'users' | 'admin-services' | 'pos' | 'salones' | 'terceros';
 
 const pageTitles: Record<ViewId, { title: string; subtitle?: string }> = {
   login: { title: 'Iniciar Sesión' },
@@ -30,11 +29,10 @@ const pageTitles: Record<ViewId, { title: string; subtitle?: string }> = {
   profile: { title: 'Mi Perfil', subtitle: 'Tu información personal y ficha médica' },
   admin: { title: 'Panel de Administración', subtitle: 'Gestión de citas, pagos y alertas de salud' },
   reports: { title: 'Reportes y Estadísticas', subtitle: 'Análisis detallado del rendimiento de tu salón' },
-  sales: { title: 'Ventas y Facturación', subtitle: 'Registro histórico de transacciones y pagos' },
   inventory: { title: 'Inventario de Productos', subtitle: 'Gestión de catálogo, existencias y precios' },
   users: { title: 'Directorio de Usuarios', subtitle: 'Gestión completa de clientes, administradores y staff' },
   'admin-services': { title: 'Gestión de Catálogo', subtitle: 'Administra tus servicios, precios e imágenes' },
-  pos: { title: 'Punto de Venta', subtitle: 'Venta rápida de productos y cobro a clientes' },
+  pos: { title: 'Punto de Pago', subtitle: 'Cobro rápido de citas y productos opcionales' },
   salones: { title: 'Gestión de Salones', subtitle: 'Administra las empresas registradas en la plataforma' },
   terceros: { title: 'Terceros', subtitle: 'Proveedores, clientes y contactos externos' },
 };
@@ -174,8 +172,6 @@ export default function HomePage() {
         return <AdminView userId={userId} />;
       case 'reports':
         return <ReportsView userId={userId} />;
-      case 'sales':
-        return <SalesView userId={userId} />;
       case 'inventory':
         return <InventoryView userId={userId} />;
       case 'users':

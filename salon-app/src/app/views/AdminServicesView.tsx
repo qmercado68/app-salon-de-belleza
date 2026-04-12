@@ -12,12 +12,19 @@ import Badge from '@/components/atoms/Badge/Badge';
 import Button from '@/components/atoms/Button/Button';
 import Input, { SelectInput, TextArea } from '@/components/atoms/Input/Input';
 import { api } from '@/lib/api';
-import { Service, Salon } from '@/lib/types';
+import { Service, Salon, TaxTreatment } from '@/lib/types';
+import { SERVICE_IMAGE_LIMITS, validateImageFile } from '@/lib/imageValidation';
 
 interface AdminServicesViewProps {
   currentViewerRole?: string;
   userId?: string;
 }
+
+const TAX_TREATMENT_OPTIONS: Array<{ value: TaxTreatment; label: string }> = [
+  { value: 'gravado', label: 'Gravado' },
+  { value: 'exento', label: 'Exento' },
+  { value: 'excluido', label: 'Excluido' },
+];
 
 export default function AdminServicesView({ currentViewerRole, userId }: AdminServicesViewProps) {
   const [services, setServices] = useState<Service[]>([]);
@@ -86,6 +93,7 @@ export default function AdminServicesView({ currentViewerRole, userId }: AdminSe
         price: 0, 
         durationMinutes: 30, 
         category: 'Cabello', 
+        taxTreatment: 'gravado',
         isActive: true 
       });
     }
@@ -143,10 +151,17 @@ export default function AdminServicesView({ currentViewerRole, userId }: AdminSe
     }
   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      setSelectedFile(e.target.files[0]);
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const validationError = await validateImageFile(file, SERVICE_IMAGE_LIMITS);
+    if (validationError) {
+      alert(validationError);
+      setSelectedFile(null);
+      e.target.value = '';
+      return;
     }
+    setSelectedFile(file);
   };
 
   if (currentViewerRole !== 'admin' && currentViewerRole !== 'superadmin') {
@@ -223,6 +238,7 @@ export default function AdminServicesView({ currentViewerRole, userId }: AdminSe
                 <th>Categoría</th>
                 <th>Salón</th>
                 <th>Precio / Duración</th>
+                <th>IVA</th>
                 <th>Estado</th>
                 <th>Acciones</th>
               </tr>
@@ -264,6 +280,11 @@ export default function AdminServicesView({ currentViewerRole, userId }: AdminSe
                       <span className={styles.price}>${s.price.toFixed(2)}</span>
                       <span className={styles.duration}>{s.durationMinutes} min</span>
                     </div>
+                  </td>
+                  <td>
+                    <span style={{ fontSize: '0.8rem', color: 'var(--neutral-700)' }}>
+                      {TAX_TREATMENT_OPTIONS.find((o) => o.value === (s.taxTreatment || 'gravado'))?.label || 'Gravado'}
+                    </span>
                   </td>
                   <td>
                     {s.isActive ? (
@@ -309,7 +330,7 @@ export default function AdminServicesView({ currentViewerRole, userId }: AdminSe
               ))}
               {filteredServices.length === 0 && (
                 <tr>
-                  <td colSpan={6} style={{ textAlign: 'center', padding: '4rem' }}>
+                  <td colSpan={7} style={{ textAlign: 'center', padding: '4rem' }}>
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem', color: 'var(--neutral-400)' }}>
                       <Search size={48} />
                       <p>No se encontraron servicios con los filtros actuales.</p>
@@ -395,6 +416,13 @@ export default function AdminServicesView({ currentViewerRole, userId }: AdminSe
                 options={categoryOptions}
                 value={editingService.category || 'Cabello'}
                 onChange={e => setEditingService({...editingService, category: e.target.value})}
+              />
+
+              <SelectInput
+                label="Tratamiento IVA"
+                options={TAX_TREATMENT_OPTIONS.map(o => ({ value: o.value, label: o.label }))}
+                value={editingService.taxTreatment || 'gravado'}
+                onChange={e => setEditingService({...editingService, taxTreatment: e.target.value as TaxTreatment})}
               />
 
               <SelectInput

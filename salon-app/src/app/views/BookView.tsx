@@ -186,7 +186,16 @@ export default function BookView({ onSuccess, userId, userRole }: BookViewProps)
           setLoadingTimeSlots(true);
           const workStart = selectedStylist.workStartTime || '09:00';
           const workEnd = selectedStylist.workEndTime || '18:00';
-          const slots = await api.getAvailableTimeSlots(selectedDate, selectedStylist.id, selectedService.durationMinutes, workStart, workEnd);
+          const slots = await api.getAvailableTimeSlots(
+            selectedDate,
+            selectedStylist.id,
+            selectedService.durationMinutes,
+            workStart,
+            workEnd,
+            selectedStylist.breakStartTime,
+            selectedStylist.breakEndTime,
+            selectedStylist.isAvailable ?? true
+          );
           setTimeSlots(slots);
         } catch (err) {
           console.error('Error fetching time slots:', err);
@@ -462,21 +471,29 @@ export default function BookView({ onSuccess, userId, userRole }: BookViewProps)
           {loadingStylists ? (
             <p>Buscando profesionales...</p>
           ) : (
-            <div className={styles.stylistGrid}>
-              {filteredStylists.map((sty) => (
-                <div
-                  key={sty.id}
-                  className={`${styles.stylistCard} ${selectedStylist?.id === sty.id ? styles.selected : ''}`}
-                  onClick={() => setSelectedStylist(sty)}
-                >
-                  <Avatar name={sty.name} size="lg" imageUrl={sty.avatarUrl} />
-                  <div className={styles.stylistInfo}>
-                    <span className={styles.stylistName}>{sty.name}</span>
-                    <span className={styles.stylistSpecialty}>{sty.specialty}</span>
-                    <p className={styles.stylistDesc}>{sty.description}</p>
+              <div className={styles.stylistGrid}>
+                {filteredStylists.map((sty) => (
+                  (() => {
+                    const isStylistAvailable = sty.isAvailable !== false;
+                    return (
+                  <div
+                    key={sty.id}
+                    className={`${styles.stylistCard} ${selectedStylist?.id === sty.id ? styles.selected : ''} ${!isStylistAvailable ? styles.stylistDisabled : ''}`}
+                    onClick={() => isStylistAvailable && setSelectedStylist(sty)}
+                  >
+                    <Avatar name={sty.name} size="lg" imageUrl={sty.avatarUrl} />
+                    <div className={styles.stylistInfo}>
+                      <span className={styles.stylistName}>{sty.name}</span>
+                      <span className={styles.stylistSpecialty}>{sty.specialty}</span>
+                      <p className={styles.stylistDesc}>{sty.description}</p>
+                      {!isStylistAvailable && (
+                        <span className={styles.stylistUnavailable}>No disponible</span>
+                      )}
+                    </div>
                   </div>
-                </div>
-              ))}
+                    );
+                  })()
+                ))}
               {filteredStylists.length === 0 && (
                 <div style={{ textAlign: 'center', gridColumn: '1 / -1', padding: '2rem', color: 'var(--neutral-500)' }}>
                   <p>No se encontraron profesionales.</p>

@@ -12,6 +12,9 @@ interface AppointmentRowProps {
   showClient?: boolean;
   onCancel?: (id: string) => void;
   onMarkPaid?: (id: string) => void;
+  onDelete?: (id: string) => void;
+  canDelete?: boolean;
+  showMedicalAlert?: boolean;
 }
 
 export default function AppointmentRow({
@@ -19,10 +22,16 @@ export default function AppointmentRow({
   showClient = false,
   onCancel,
   onMarkPaid,
+  onDelete,
+  canDelete = false,
+  showMedicalAlert = false,
 }: AppointmentRowProps) {
   const date = new Date(appointment.appointmentDate);
   const canCancel =
     appointment.status === 'pendiente' || appointment.status === 'confirmada';
+  const hasMedicalAlert = showMedicalAlert
+    && appointment.medicalFormRequested
+    && ((appointment.allergies || '').trim() || (appointment.medicalConditions || '').trim());
 
   return (
     <div className={styles.row}>
@@ -43,6 +52,16 @@ export default function AppointmentRow({
                 >
                   {appointment.clientPhone}
                 </a>
+              )}
+              {hasMedicalAlert && (
+                <div className={styles.medicalAlert}>
+                  {appointment.allergies && (
+                    <div><strong>Alergias:</strong> {appointment.allergies}</div>
+                  )}
+                  {appointment.medicalConditions && (
+                    <div><strong>Condiciones:</strong> {appointment.medicalConditions}</div>
+                  )}
+                </div>
               )}
             </>
           )}
@@ -72,6 +91,11 @@ export default function AppointmentRow({
         {onMarkPaid && !appointment.isPaid && appointment.status === 'completada' && (
           <Button size="sm" variant="secondary" onClick={() => onMarkPaid(appointment.id)}>
             Marcar Pagada
+          </Button>
+        )}
+        {onDelete && canDelete && (
+          <Button size="sm" variant="danger" onClick={() => onDelete(appointment.id)}>
+            Eliminar
           </Button>
         )}
       </div>

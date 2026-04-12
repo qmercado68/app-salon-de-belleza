@@ -1,15 +1,16 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Search, ChevronLeft, ShieldAlert, Edit2 } from 'lucide-react';
+import { Search, ChevronLeft, ShieldAlert, Edit2, Plus } from 'lucide-react';
 import styles from './UsersView.module.css';
 import Card from '@/components/atoms/Card/Card';
 import Badge from '@/components/atoms/Badge/Badge';
 import Button from '@/components/atoms/Button/Button';
 import Avatar from '@/components/atoms/Avatar/Avatar';
-import Input from '@/components/atoms/Input/Input';
+import Input, { SelectInput } from '@/components/atoms/Input/Input';
 import { api } from '@/lib/api';
-import { Profile, Salon } from '@/lib/types';
+import { Profile, Salon, UserRole } from '@/lib/types';
+import { formatFullName } from '@/lib/name';
 import ProfileView from './ProfileView';
 
 interface UsersViewProps {
@@ -18,11 +19,34 @@ interface UsersViewProps {
 
 export default function UsersView({ currentViewerRole }: UsersViewProps) {
   const [users, setUsers] = useState<Profile[]>([]);
+  const [salons, setSalons] = useState<Salon[]>([]);
   const [salonsMap, setSalonsMap] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedProfile, setSelectedProfile] = useState<Profile | null>(null);
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
+  const [newUser, setNewUser] = useState<{
+    email: string;
+    firstName: string;
+    secondName: string;
+    lastName: string;
+    secondLastName: string;
+    phone: string;
+    role: UserRole;
+    salonId: string;
+  }>({
+    email: '',
+    firstName: '',
+    secondName: '',
+    lastName: '',
+    secondLastName: '',
+    phone: '',
+    role: 'client',
+    salonId: '',
+  });
 
   const fetchUsers = async () => {
     try {
@@ -33,6 +57,7 @@ export default function UsersView({ currentViewerRole }: UsersViewProps) {
         api.getSalons(),
       ]);
       setUsers(data);
+      setSalons(salons);
       const map: Record<string, string> = {};
       salons.forEach(s => { map[s.id] = s.name; });
       setSalonsMap(map);
@@ -53,10 +78,59 @@ export default function UsersView({ currentViewerRole }: UsersViewProps) {
 
   const filteredUsers = users
     .filter((u) => 
-      u.fullName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (formatFullName({
+        firstName: u.firstName,
+        secondName: u.secondName,
+        lastName: u.lastName,
+        secondLastName: u.secondLastName,
+      }) || u.fullName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
       u.email.toLowerCase().includes(searchTerm.toLowerCase())
     )
     .sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+
+  const roleOptions = [
+    { value: 'client', label: 'Cliente' },
+    { value: 'stylist', label: 'Estilista' },
+    { value: 'admin', label: 'Administrador' },
+    { value: 'superadmin', label: 'Super Admin' },
+  ].filter((opt) => currentViewerRole === 'superadmin' || opt.value !== 'superadmin');
+
+  const handleCreateUser = async () => {
+    if (!newUser.email.trim()) {
+      setCreateError('El correo es obligatorio.');
+      return;
+    }
+    setCreateError(null);
+    setCreating(true);
+    try {
+      await api.inviteUser({
+        email: newUser.email,
+        role: newUser.role,
+        firstName: newUser.firstName,
+        secondName: newUser.secondName,
+        lastName: newUser.lastName,
+        secondLastName: newUser.secondLastName,
+        salonId: newUser.salonId || undefined,
+        phone: newUser.phone || undefined,
+      });
+      setShowCreateModal(false);
+      setNewUser({
+        email: '',
+        firstName: '',
+        secondName: '',
+        lastName: '',
+        secondLastName: '',
+        phone: '',
+        role: 'client',
+        salonId: '',
+      });
+      fetchUsers();
+    } catch (err: any) {
+      setCreateError(err?.message ?? 'No se pudo crear el usuario.');
+    } finally {
+      setCreating(false);
+    }
+  };
 
   // Si hemos seleccionado a un usuario para editar, renderizamos ProfileView
   if (selectedProfile) {
@@ -104,7 +178,12 @@ export default function UsersView({ currentViewerRole }: UsersViewProps) {
     <div className={styles.page || ''} style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
         <h1 style={{ fontSize: '1.5rem', fontWeight: 600 }}>Directorio de Usuarios</h1>
-        <Badge variant="info" size="md">{users.length} Registros</Badge>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+          <Badge variant="info" size="md">{users.length} Registros</Badge>
+          <Button size="sm" icon={<Plus size={16} />} onClick={() => { setShowCreateModal(true); setCreateError(null); }}>
+            Crear usuario
+          </Button>
+        </div>
       </div>
 
       <Card>
@@ -147,14 +226,22 @@ export default function UsersView({ currentViewerRole }: UsersViewProps) {
                   </td>
                 </tr>
               ) : (
-                filteredUsers.map((u) => (
+                filteredUsers.map((u) => {
+                  const displayName = formatFullName({
+                    firstName: u.firstName,
+                    secondName: u.secondName,
+                    lastName: u.lastName,
+                    secondLastName: u.secondLastName,
+                  }) || u.fullName || 'Sin nombre';
+
+                  return (
                   <tr key={u.id} style={{ borderBottom: '1px solid var(--color-border)' }}>
                     <td style={{ padding: '1rem' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                        <Avatar name={u.fullName} size="sm" />
+                        <Avatar name={displayName} size="sm" />
                         <div>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                            <div style={{ fontWeight: 500 }}>{u.fullName || 'Sin nombre'}</div>
+                            <div style={{ fontWeight: 500 }}>{displayName}</div>
                             {u.createdAt && new Date(u.createdAt) > new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) && (
                               <Badge variant="info">NUEVO</Badge>
                             )}
@@ -184,12 +271,80 @@ export default function UsersView({ currentViewerRole }: UsersViewProps) {
                       </Button>
                     </td>
                   </tr>
-                ))
+                );
+                })
               )}
             </tbody>
           </table>
         </div>
       </Card>
+      {showCreateModal && (
+        <div className={styles.modalOverlay} onClick={(e) => e.target === e.currentTarget && setShowCreateModal(false)}>
+          <div className={styles.modal}>
+            <div className={styles.modalHeader}>
+              <h2>Nuevo usuario</h2>
+              <p>Se enviará un correo de invitación para que el usuario ingrese.</p>
+            </div>
+            <div className={styles.formGrid}>
+              <Input
+                label="Correo *"
+                type="email"
+                value={newUser.email}
+                onChange={(e) => setNewUser((prev) => ({ ...prev, email: e.target.value }))}
+              />
+              <Input
+                label="Teléfono"
+                value={newUser.phone}
+                onChange={(e) => setNewUser((prev) => ({ ...prev, phone: e.target.value }))}
+              />
+              <Input
+                label="Primer Nombre"
+                value={newUser.firstName}
+                onChange={(e) => setNewUser((prev) => ({ ...prev, firstName: e.target.value }))}
+              />
+              <Input
+                label="Segundo Nombre"
+                value={newUser.secondName}
+                onChange={(e) => setNewUser((prev) => ({ ...prev, secondName: e.target.value }))}
+              />
+              <Input
+                label="Primer Apellido"
+                value={newUser.lastName}
+                onChange={(e) => setNewUser((prev) => ({ ...prev, lastName: e.target.value }))}
+              />
+              <Input
+                label="Segundo Apellido"
+                value={newUser.secondLastName}
+                onChange={(e) => setNewUser((prev) => ({ ...prev, secondLastName: e.target.value }))}
+              />
+              <SelectInput
+                label="Rol"
+                options={roleOptions}
+                value={newUser.role}
+                onChange={(e) => setNewUser((prev) => ({ ...prev, role: e.target.value as UserRole }))}
+              />
+              <SelectInput
+                label="Salón"
+                options={[
+                  { value: '', label: 'Sin asignar' },
+                  ...salons.map((s) => ({ value: s.id, label: s.name })),
+                ]}
+                value={newUser.salonId}
+                onChange={(e) => setNewUser((prev) => ({ ...prev, salonId: e.target.value }))}
+              />
+            </div>
+            {createError && <div className={styles.errorText}>{createError}</div>}
+            <div className={styles.modalActions}>
+              <Button variant="secondary" onClick={() => setShowCreateModal(false)} disabled={creating}>
+                Cancelar
+              </Button>
+              <Button onClick={handleCreateUser} disabled={creating}>
+                {creating ? 'Creando...' : 'Enviar invitación'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

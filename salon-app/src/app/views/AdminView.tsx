@@ -51,16 +51,15 @@ export default function AdminView({ userId }: AdminViewProps) {
     );
   };
 
-  // Detect allergy info from appointments
-  // appointments joined with profiles via Supabase return profile data in nested object
-  const getClientAllergy = (apt: Appointment): string | null => {
-    // When data comes from Supabase join, allergies may be available on the raw object
-    const raw = apt as any;
-    return raw?.profiles?.allergies || raw?.allergies || null;
+  const getMedicalAlert = (apt: Appointment) => {
+    if (!apt.medicalFormRequested) return null;
+    const allergies = apt.allergies?.trim();
+    const conditions = apt.medicalConditions?.trim();
+    if (!allergies && !conditions) return null;
+    return { allergies, conditions };
   };
 
-  // Build allergy alerts from appointments that have allergy info
-  const appointmentsWithAllergies = appointments.filter((apt) => getClientAllergy(apt));
+  const appointmentsWithAlerts = appointments.filter((apt) => getMedicalAlert(apt));
 
   if (loading) {
     return <div className={styles.page}><p>Cargando...</p></div>;
@@ -73,24 +72,22 @@ export default function AdminView({ userId }: AdminViewProps) {
   return (
     <div className={styles.page}>
       {/* Allergy Alerts Section */}
-      {appointmentsWithAllergies.length > 0 && (
+      {appointmentsWithAlerts.length > 0 && (
         <Card className={styles.alertCard}>
           <div className={styles.sectionHeader}>
             <AlertTriangle size={20} className={styles.warningIcon} />
-            <h2 className={styles.sectionTitle}>⚠️ Alertas de Salud - Alergias</h2>
+            <h2 className={styles.sectionTitle}>⚠️ Alertas de Salud</h2>
           </div>
           <div className={styles.alertsList}>
-            {appointmentsWithAllergies.map((apt) => {
-              const allergy = getClientAllergy(apt);
-              const raw = apt as any;
-              const bloodType = raw?.profiles?.blood_type || '';
-              const medicalConditions = raw?.profiles?.medical_conditions || '';
+            {appointmentsWithAlerts.map((apt) => {
+              const alert = getMedicalAlert(apt);
+              if (!alert) return null;
               return (
                 <AlertBanner
                   key={apt.id}
                   type="danger"
-                  title={`${apt.clientName}${bloodType ? ` - Tipo de sangre: ${bloodType}` : ''}`}
-                  message={`Alergias: ${allergy}${medicalConditions ? ` | Condiciones: ${medicalConditions}` : ''}`}
+                  title={apt.clientName}
+                  message={`${alert.allergies ? `Alergias: ${alert.allergies}` : ''}${alert.conditions ? `${alert.allergies ? ' | ' : ''}Condiciones: ${alert.conditions}` : ''}`}
                 />
               );
             })}
@@ -125,16 +122,16 @@ export default function AdminView({ userId }: AdminViewProps) {
               </div>
             ) : (
               appointments.map((apt) => {
-                const allergy = getClientAllergy(apt);
+                const alert = getMedicalAlert(apt);
                 return (
-                  <div key={apt.id} className={`${styles.tableRow} ${allergy ? styles.hasAlert : ''}`}>
+                  <div key={apt.id} className={`${styles.tableRow} ${alert ? styles.hasAlert : ''}`}>
                     <div className={styles.clientCell}>
                       <Avatar name={apt.clientName} size="sm" />
                       <div>
                         <span className={styles.clientName}>{apt.clientName}</span>
-                        {allergy && (
+                        {alert && (
                           <span className={styles.allergyTag}>
-                            <AlertTriangle size={12} /> Alergias
+                            <AlertTriangle size={12} /> Ficha médica
                           </span>
                         )}
                       </div>
