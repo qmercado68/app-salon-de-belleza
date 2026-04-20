@@ -10,6 +10,12 @@ import { Service, Appointment, Profile, Product, ProductSale, SaleItem, DailyRep
 import { formatFullName, resolveNameParts } from './name';
 import { mockProducts, mockProductSales } from './mockData';
 
+const hasFullProfileColumns = (row: any): boolean => {
+  if (!row || typeof row !== 'object') return false;
+  return ['document_id', 'birth_date', 'department', 'city']
+    .every((key) => Object.prototype.hasOwnProperty.call(row, key));
+};
+
 // ==========================================
 // Generic API Wrapper with Mock Fallback
 // ==========================================
@@ -175,6 +181,20 @@ export const api = {
     const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(userId);
     if (!isUuid) return null;
 
+    // Preferir RPC segura para evitar recursión RLS en profiles
+    const { data: rpcSalonId, error: rpcError } = await supabase.rpc('get_my_salon_id');
+    if (!rpcError && rpcSalonId) return rpcSalonId as string;
+
+    // Fallback a metadata de sesión
+    const { data: authData } = await supabase.auth.getUser();
+    const currentUser = authData?.user;
+    if (currentUser?.id === userId) {
+      const metaSalonId = (currentUser.app_metadata as any)?.salon_id
+        ?? (currentUser.user_metadata as any)?.salon_id
+        ?? null;
+      if (metaSalonId) return metaSalonId as string;
+    }
+
     const { data, error } = await supabase
       .from('profiles')
       .select('salon_id')
@@ -218,6 +238,56 @@ export const api = {
     })) as Service[];
   },
 
+  async getManageableServices(userId?: string, salonId?: string): Promise<Service[]> {
+    if (!isSupabaseConfigured()) return mockServices;
+
+    const { data, error } = await supabase.rpc('get_manageable_services', {
+      p_salon_id: salonId ?? null,
+    });
+
+    if (error) {
+      return api.getServices(userId, salonId);
+    }
+
+    return (data as any[]).map(d => ({
+      id: d.id,
+      name: d.name,
+      description: d.description,
+      durationMinutes: d.duration_minutes,
+      price: d.price,
+      category: d.category,
+      taxTreatment: d.tax_treatment ?? 'gravado',
+      imageUrl: d.image_url,
+      isActive: d.is_active,
+      salonId: d.salon_id,
+    })) as Service[];
+  },
+
+  async getBookableServices(userId?: string, salonId?: string): Promise<Service[]> {
+    if (!isSupabaseConfigured()) return mockServices.filter((s) => s.isActive !== false);
+
+    const { data, error } = await supabase.rpc('get_bookable_services', {
+      p_salon_id: salonId ?? null,
+    });
+    if (error) throw error;
+
+    const mapped = (data as any[]).map((d) => ({
+      id: d.id,
+      name: d.name,
+      description: d.description,
+      durationMinutes: d.duration_minutes,
+      price: d.price,
+      category: d.category,
+      taxTreatment: d.tax_treatment ?? 'gravado',
+      imageUrl: d.image_url,
+      isActive: d.is_active,
+      salonId: d.salon_id,
+    })) as Service[];
+
+    if (mapped.length > 0) return mapped;
+    return api.getServices(userId, salonId);
+  },
+
   async createService(service: Partial<Service>, userId?: string): Promise<Service> {
     if (!isSupabaseConfigured()) throw new Error('Mock no soportado en creación admin.');
 
@@ -226,19 +296,25 @@ export const api = {
       salonId = (await api.getSalonId(userId)) ?? undefined;
     }
 
-    const payload = {
-      name: service.name,
-      description: service.description,
-      duration_minutes: service.durationMinutes,
-      price: service.price,
-      category: service.category,
-      tax_treatment: service.taxTreatment ?? 'gravado',
-      image_url: service.imageUrl,
-      is_active: service.isActive ?? true,
-      salon_id: salonId ?? null,
-    };
+    const { data: savedId, error: saveError } = await supabase.rpc('save_manageable_service', {
+      p_id: null,
+      p_name: service.name ?? null,
+      p_description: service.description ?? null,
+      p_duration_minutes: service.durationMinutes ?? null,
+      p_price: service.price ?? null,
+      p_category: service.category ?? null,
+      p_tax_treatment: service.taxTreatment ?? 'gravado',
+      p_image_url: service.imageUrl ?? null,
+      p_is_active: service.isActive ?? true,
+      p_salon_id: salonId ?? null,
+    });
+    if (saveError) throw saveError;
 
-    const { data, error } = await supabase.from('services').insert(payload).select().single();
+    const { data, error } = await supabase
+      .from('services')
+      .select('*')
+      .eq('id', savedId as string)
+      .single();
     if (error) throw error;
     return {
       id: data.id,
@@ -256,18 +332,18 @@ export const api = {
   async updateService(id: string, service: Partial<Service>): Promise<void> {
     if (!isSupabaseConfigured()) throw new Error('Mock no soportado en edición admin.');
     
-    const payload: any = {};
-    if (service.name !== undefined) payload.name = service.name;
-    if (service.description !== undefined) payload.description = service.description;
-    if (service.durationMinutes !== undefined) payload.duration_minutes = service.durationMinutes;
-    if (service.price !== undefined) payload.price = service.price;
-    if (service.category !== undefined) payload.category = service.category;
-    if (service.taxTreatment !== undefined) payload.tax_treatment = service.taxTreatment;
-    if (service.imageUrl !== undefined) payload.image_url = service.imageUrl;
-    if (service.isActive !== undefined) payload.is_active = service.isActive;
-    if (service.salonId !== undefined) payload.salon_id = service.salonId || null;
-
-    const { error } = await supabase.from('services').update(payload).eq('id', id);
+    const { error } = await supabase.rpc('save_manageable_service', {
+      p_id: id,
+      p_name: service.name ?? null,
+      p_description: service.description ?? null,
+      p_duration_minutes: service.durationMinutes ?? null,
+      p_price: service.price ?? null,
+      p_category: service.category ?? null,
+      p_tax_treatment: service.taxTreatment ?? null,
+      p_image_url: service.imageUrl ?? null,
+      p_is_active: service.isActive ?? null,
+      p_salon_id: service.salonId ?? null,
+    });
     if (error) throw error;
   },
 
@@ -310,6 +386,52 @@ export const api = {
           status: client.status || 'active',
           terminatedAt: client.terminatedAt ?? null,
           medicalFormRequested: client.medicalFormRequested ?? false,
+        } as Profile;
+      });
+    }
+
+    const { data: rpcData, error: rpcError } = await supabase.rpc('get_user_directory');
+    if (!rpcError && Array.isArray(rpcData)) {
+      return (rpcData as any[]).map((d) => {
+        const nameParts = resolveNameParts({
+          firstName: d.first_name,
+          secondName: d.second_name,
+          lastName: d.last_name,
+          secondLastName: d.second_last_name,
+        }, d.full_name);
+        const fullName = formatFullName(nameParts) || d.full_name || '';
+
+        return {
+          id: d.id,
+          fullName,
+          firstName: nameParts.firstName || '',
+          secondName: nameParts.secondName || '',
+          lastName: nameParts.lastName || '',
+          secondLastName: nameParts.secondLastName || '',
+          documentId: '',
+          birthDate: '',
+          gender: '',
+          email: d.email ?? '',
+          phone: d.phone ?? '',
+          address: '',
+          department: '',
+          city: '',
+          status: d.status ?? 'active',
+          terminatedAt: null,
+          isAvailable: (d.status ?? 'active') === 'active',
+          breakStartTime: undefined,
+          breakEndTime: undefined,
+          bloodType: '',
+          medicalConditions: '',
+          allergies: '',
+          medicalFormRequested: false,
+          role: d.role ?? 'client',
+          specialty: '',
+          avatarUrl: undefined,
+          salonId: d.salon_id ?? undefined,
+          createdAt: d.created_at ?? '',
+          workStartTime: undefined,
+          workEndTime: undefined,
         } as Profile;
       });
     }
@@ -365,6 +487,59 @@ export const api = {
     });
   },
 
+  async getBookableClients(userId?: string, salonId?: string): Promise<Profile[]> {
+    if (!isSupabaseConfigured()) {
+      return mockClients.filter((c) => c.role === 'client') as Profile[];
+    }
+
+    const { data: currentRole } = await supabase.rpc('get_my_role');
+    if (currentRole === 'superadmin') {
+      const { data: rpcData, error: rpcError } = await supabase.rpc('get_superadmin_bookable_clients', {
+        p_salon_id: salonId ?? null,
+      });
+      if (rpcError) throw rpcError;
+      return (rpcData as any[]).map((d) => ({
+        id: d.id,
+        fullName: d.full_name ?? '',
+        email: d.email ?? '',
+        phone: d.phone ?? '',
+        role: d.role ?? 'client',
+        avatarUrl: d.avatar_url ?? undefined,
+        salonId: d.salon_id ?? undefined,
+        status: d.status ?? 'active',
+        createdAt: d.created_at ?? '',
+      })) as Profile[];
+    }
+
+    let query = supabase
+      .from('profiles')
+      .select('*')
+      .eq('role', 'client')
+      .order('full_name', { ascending: true });
+
+    if (salonId) {
+      query = query.eq('salon_id', salonId);
+    } else if (userId) {
+      const resolved = await api.getSalonId(userId);
+      if (resolved) query = query.eq('salon_id', resolved);
+    }
+
+    const { data, error } = await query;
+    if (error) throw error;
+
+    return (data as any[]).map((d) => ({
+      id: d.id,
+      fullName: d.full_name ?? '',
+      email: d.email ?? '',
+      phone: d.phone ?? '',
+      role: d.role ?? 'client',
+      avatarUrl: d.avatar_url ?? undefined,
+      salonId: d.salon_id ?? undefined,
+      status: d.status ?? 'active',
+      createdAt: d.created_at ?? '',
+    })) as Profile[];
+  },
+
   async inviteUser(payload: {
     email: string;
     role: UserRole;
@@ -401,11 +576,28 @@ export const api = {
       ];
     }
 
+    const { data: rpcData, error: rpcError } = await supabase.rpc('get_bookable_stylists', {
+      p_salon_id: salonId ?? null,
+    });
+    if (!rpcError && Array.isArray(rpcData) && rpcData.length > 0) {
+      return (rpcData as any[]).map((d) => ({
+        id: d.id,
+        name: d.full_name ?? '',
+        specialty: d.specialty ?? 'Estilista',
+        avatarUrl: d.avatar_url ?? undefined,
+        description: d.medical_conditions ?? '',
+        workStartTime: d.work_start_time ? d.work_start_time.substring(0, 5) : '09:00',
+        workEndTime: d.work_end_time ? d.work_end_time.substring(0, 5) : '18:00',
+        breakStartTime: d.break_start_time ? d.break_start_time.substring(0, 5) : undefined,
+        breakEndTime: d.break_end_time ? d.break_end_time.substring(0, 5) : undefined,
+        isAvailable: d.status === 'inactive' ? false : (d.is_available ?? true),
+      })) as Stylist[];
+    }
+
     let query = supabase
       .from('profiles')
       .select('id, full_name, specialty, avatar_url, medical_conditions, work_start_time, work_end_time, break_start_time, break_end_time, is_available, salon_id, status')
       .eq('role', 'stylist')
-      .eq('status', 'active')
       .order('full_name', { ascending: true });
 
     if (salonId) {
@@ -421,7 +613,9 @@ export const api = {
 
     if (error) throw error;
     
-    return (data as any[]).map((d) => ({
+    return (data as any[])
+      .filter((d) => d.status !== 'terminated')
+      .map((d) => ({
       id: d.id,
       name: d.full_name ?? '',
       specialty: d.specialty ?? 'Estilista',
@@ -431,7 +625,7 @@ export const api = {
       workEndTime: d.work_end_time ? d.work_end_time.substring(0, 5) : '18:00',
       breakStartTime: d.break_start_time ? d.break_start_time.substring(0, 5) : undefined,
       breakEndTime: d.break_end_time ? d.break_end_time.substring(0, 5) : undefined,
-      isAvailable: (d.status ?? 'active') === 'active' ? (d.is_available ?? true) : false,
+      isAvailable: d.status === 'inactive' ? false : (d.is_available ?? true),
     })) as Stylist[];
   },
 
@@ -457,6 +651,113 @@ export const api = {
       } as Profile;
     }
 
+    const { data: authData } = await supabase.auth.getUser();
+    const authUser = authData?.user;
+
+    if (authUser?.id === userId) {
+      const { data: myRpcData, error: myRpcError } = await supabase.rpc('get_my_profile_safe');
+      const myRpcRow = Array.isArray(myRpcData) ? myRpcData[0] : null;
+      if (!myRpcError && myRpcRow) {
+        const d = myRpcRow as any;
+        if (!hasFullProfileColumns(d)) {
+          // Algunos entornos tienen una versión antigua del RPC con menos columnas.
+          // Continuamos con los siguientes fallbacks para recuperar el perfil completo.
+        } else {
+        const nameParts = resolveNameParts({
+          firstName: d.first_name,
+          secondName: d.second_name,
+          lastName: d.last_name,
+          secondLastName: d.second_last_name,
+        }, d.full_name);
+        const fullName = formatFullName(nameParts) || d.full_name || '';
+        return {
+          id: d.id,
+          fullName,
+          firstName: nameParts.firstName || '',
+          secondName: nameParts.secondName || '',
+          lastName: nameParts.lastName || '',
+          secondLastName: nameParts.secondLastName || '',
+          documentId: d.document_id ?? '',
+          birthDate: d.birth_date ?? '',
+          gender: d.gender ?? '',
+          email: d.email ?? '',
+          phone: d.phone ?? '',
+          address: d.address ?? '',
+          department: d.department ?? '',
+          city: d.city ?? '',
+          status: d.status ?? 'active',
+          terminatedAt: d.terminated_at ?? null,
+          isAvailable: (d.status ?? 'active') === 'active' ? (d.is_available ?? true) : false,
+          breakStartTime: d.break_start_time ? d.break_start_time.substring(0, 5) : undefined,
+          breakEndTime: d.break_end_time ? d.break_end_time.substring(0, 5) : undefined,
+          bloodType: d.blood_type ?? '',
+          medicalConditions: d.medical_conditions ?? '',
+          allergies: d.allergies ?? '',
+          medicalFormRequested: d.medical_form_requested ?? false,
+          role: d.role ?? 'client',
+          specialty: d.specialty ?? '',
+          avatarUrl: d.avatar_url ?? undefined,
+          salonId: d.salon_id ?? undefined,
+          createdAt: d.created_at ?? '',
+          workStartTime: d.work_start_time ? d.work_start_time.substring(0, 5) : undefined,
+          workEndTime: d.work_end_time ? d.work_end_time.substring(0, 5) : undefined,
+        } as Profile;
+        }
+      }
+    }
+
+    const { data: rpcData, error: rpcError } = await supabase.rpc('get_profile_safe', {
+      p_user_id: userId,
+    });
+
+    const rpcRow = Array.isArray(rpcData) ? rpcData[0] : null;
+    if (!rpcError && rpcRow) {
+      const d = rpcRow as any;
+      if (!hasFullProfileColumns(d)) {
+        // Si el RPC retorna una firma recortada, evitamos devolver datos parciales.
+      } else {
+      const nameParts = resolveNameParts({
+        firstName: d.first_name,
+        secondName: d.second_name,
+        lastName: d.last_name,
+        secondLastName: d.second_last_name,
+      }, d.full_name);
+      const fullName = formatFullName(nameParts) || d.full_name || '';
+      return {
+        id: d.id,
+        fullName,
+        firstName: nameParts.firstName || '',
+        secondName: nameParts.secondName || '',
+        lastName: nameParts.lastName || '',
+        secondLastName: nameParts.secondLastName || '',
+        documentId: d.document_id ?? '',
+        birthDate: d.birth_date ?? '',
+        gender: d.gender ?? '',
+        email: d.email ?? '',
+        phone: d.phone ?? '',
+        address: d.address ?? '',
+        department: d.department ?? '',
+        city: d.city ?? '',
+        status: d.status ?? 'active',
+        terminatedAt: d.terminated_at ?? null,
+        isAvailable: (d.status ?? 'active') === 'active' ? (d.is_available ?? true) : false,
+        breakStartTime: d.break_start_time ? d.break_start_time.substring(0, 5) : undefined,
+        breakEndTime: d.break_end_time ? d.break_end_time.substring(0, 5) : undefined,
+        bloodType: d.blood_type ?? '',
+        medicalConditions: d.medical_conditions ?? '',
+        allergies: d.allergies ?? '',
+        medicalFormRequested: d.medical_form_requested ?? false,
+        role: d.role ?? 'client',
+        specialty: d.specialty ?? '',
+        avatarUrl: d.avatar_url ?? undefined,
+        salonId: d.salon_id ?? undefined,
+        createdAt: d.created_at ?? '',
+        workStartTime: d.work_start_time ? d.work_start_time.substring(0, 5) : undefined,
+        workEndTime: d.work_end_time ? d.work_end_time.substring(0, 5) : undefined,
+      } as Profile;
+      }
+    }
+
     const { data, error } = await supabase
       .from('profiles')
       .select('*')
@@ -464,32 +765,80 @@ export const api = {
       .single();
 
     if (error) {
-      if (error.code === 'PGRST116') {
-        // Record missing: return a skeleton profile based on auth user
-        const { data: { user } } = await supabase.auth.getUser();
-        const derivedFullName = user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'Usuario';
-        const nameParts = resolveNameParts({}, derivedFullName);
-        return {
-          id: userId,
-          fullName: formatFullName(nameParts) || derivedFullName,
-          firstName: nameParts.firstName || '',
-          secondName: nameParts.secondName || '',
-          lastName: nameParts.lastName || '',
-          secondLastName: nameParts.secondLastName || '',
-          email: user?.email || '',
-          department: '',
-          city: '',
-          isAvailable: true,
-          breakStartTime: undefined,
-          breakEndTime: undefined,
-          role: 'client', // Fallback role
-          status: 'active',
-          terminatedAt: null,
-          medicalFormRequested: false,
-          createdAt: new Date().toISOString(),
-        } as Profile;
+      const errorMessage = String((error as any)?.message || '');
+      const isSafeFallbackCase =
+        (error as any)?.code === 'PGRST116' ||
+        errorMessage.toLowerCase().includes('infinite recursion detected');
+
+      if (!isSafeFallbackCase) throw error;
+
+      // Fallback robusto: no depende de SELECT directo sobre profiles
+      const user = authUser;
+      const { data: roleData } = await supabase.rpc('get_my_role');
+      const { data: salonData } = await supabase.rpc('get_my_salon_id');
+      const { data: dirData, error: dirError } = await supabase.rpc('get_user_directory');
+
+      if (!dirError && Array.isArray(dirData)) {
+        const dirRow = (dirData as any[]).find((row) => row.id === userId);
+        if (dirRow) {
+          const nameParts = resolveNameParts({
+            firstName: dirRow.first_name,
+            secondName: dirRow.second_name,
+            lastName: dirRow.last_name,
+            secondLastName: dirRow.second_last_name,
+          }, dirRow.full_name);
+          const fullName = formatFullName(nameParts) || dirRow.full_name || user?.email?.split('@')[0] || 'Usuario';
+
+          return {
+            id: dirRow.id,
+            fullName,
+            firstName: nameParts.firstName || '',
+            secondName: nameParts.secondName || '',
+            lastName: nameParts.lastName || '',
+            secondLastName: nameParts.secondLastName || '',
+            email: dirRow.email || user?.email || '',
+            phone: dirRow.phone || '',
+            role: dirRow.role || (roleData as any) || 'client',
+            status: dirRow.status || 'active',
+            salonId: dirRow.salon_id ?? (salonData as any) ?? undefined,
+            isAvailable: (dirRow.status ?? 'active') === 'active',
+            medicalFormRequested: false,
+            createdAt: dirRow.created_at || new Date().toISOString(),
+            department: '',
+            city: '',
+            breakStartTime: undefined,
+            breakEndTime: undefined,
+            terminatedAt: null,
+          } as Profile;
+        }
       }
-      throw error;
+
+      const derivedFullName =
+        user?.user_metadata?.full_name ||
+        user?.email?.split('@')[0] ||
+        'Usuario';
+      const nameParts = resolveNameParts({}, derivedFullName);
+
+      return {
+        id: userId,
+        fullName: formatFullName(nameParts) || derivedFullName,
+        firstName: nameParts.firstName || '',
+        secondName: nameParts.secondName || '',
+        lastName: nameParts.lastName || '',
+        secondLastName: nameParts.secondLastName || '',
+        email: user?.email || '',
+        department: '',
+        city: '',
+        isAvailable: true,
+        breakStartTime: undefined,
+        breakEndTime: undefined,
+        role: (roleData as any) || 'client',
+        status: 'active',
+        terminatedAt: null,
+        medicalFormRequested: false,
+        salonId: (salonData as any) ?? undefined,
+        createdAt: new Date().toISOString(),
+      } as Profile;
     }
     const d = data as any;
     const nameParts = resolveNameParts({
@@ -560,7 +909,7 @@ export const api = {
     if (profile.lastName !== undefined) payload.last_name = profile.lastName?.trim() || null;
     if (profile.secondLastName !== undefined) payload.second_last_name = profile.secondLastName?.trim() || null;
     if (profile.documentId !== undefined) payload.document_id = profile.documentId;
-    if (profile.birthDate !== undefined) payload.birth_date = profile.birthDate;
+    if (profile.birthDate !== undefined) payload.birth_date = profile.birthDate || null;
     if (profile.gender !== undefined) payload.gender = profile.gender || null;
     if (profile.phone !== undefined) payload.phone = profile.phone;
     if (profile.address !== undefined) payload.address = profile.address;
@@ -603,6 +952,16 @@ export const api = {
 
     if (Object.keys(payload).length === 0) return;
 
+    const { error: rpcSaveError } = await supabase.rpc('save_profile_safe', {
+      p_profile_id: profile.id,
+      p_payload: payload,
+    });
+
+    if (!rpcSaveError) return;
+    if ((rpcSaveError as any)?.code !== 'PGRST202') {
+      throw rpcSaveError;
+    }
+
     const { data: updatedRows, error: updateError } = await supabase
       .from('profiles')
       .update(payload)
@@ -641,7 +1000,34 @@ export const api = {
   },
 
   // APPOINTMENTS
-  async getAppointments(clientId?: string, userId?: string): Promise<Appointment[]> {
+  async getDashboardAppointments(): Promise<Appointment[]> {
+    if (!isSupabaseConfigured()) return mockAppointments;
+
+    const { data, error } = await supabase.rpc('get_dashboard_appointments_safe');
+    if (error) throw error;
+
+    return ((data as any[]) || []).map((d) => ({
+      id: d.id,
+      clientId: d.client_id,
+      clientName: d.client_name ?? '',
+      serviceId: d.service_id,
+      serviceName: d.service_name ?? '',
+      servicePrice: Number(d.service_price ?? 0),
+      stylistId: d.stylist_id ?? undefined,
+      stylistName: d.stylist_name ?? 'Sin asignar',
+      appointmentDate: d.appointment_date,
+      status: d.status,
+      paymentMethod: d.payment_method ?? 'efectivo',
+      isPaid: d.is_paid ?? false,
+      salonId: d.salon_id ?? undefined,
+    })) as Appointment[];
+  },
+
+  async getAppointments(
+    clientId?: string,
+    userId?: string,
+    options?: { skipSalonFilter?: boolean }
+  ): Promise<Appointment[]> {
     // Si los IDs no son UUIDs válidos, retornar mock en lugar de fallar (modo demo)
     const isValidClientId = !clientId || /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(clientId);
     const isValidUserId = !userId || /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(userId);
@@ -652,11 +1038,78 @@ export const api = {
         : mockAppointments;
     }
 
+    if (options?.skipSalonFilter) {
+      const { data: rpcData, error: rpcError } = await supabase.rpc('get_superadmin_calendar_appointments');
+      if (!rpcError && Array.isArray(rpcData)) {
+        return (rpcData as any[]).map((d) => ({
+          id: d.id,
+          clientId: d.client_id,
+          clientName: d.client_name ?? '',
+          clientPhone: d.client_phone ?? '',
+          serviceId: d.service_id,
+          serviceName: d.service_name ?? '',
+          servicePrice: d.service_price ?? 0,
+          stylistId: d.stylist_id,
+          stylistName: d.stylist_name ?? 'Sin asignar',
+          appointmentDate: d.appointment_date,
+          status: d.status,
+          paymentMethod: d.payment_method,
+          isPaid: d.is_paid ?? false,
+          readyForBilling: d.ready_for_billing ?? false,
+          readyForBillingAt: d.ready_for_billing_at ?? null,
+          readyForBillingBy: d.ready_for_billing_by ?? null,
+          canceledAt: d.canceled_at ?? null,
+          canceledBy: d.canceled_by ?? null,
+          notes: d.notes ?? '',
+          salonId: d.salon_id,
+          salonName: d.salon_name ?? '',
+          allergies: d.allergies ?? '',
+          medicalConditions: d.medical_conditions ?? '',
+          medicalFormRequested: d.medical_form_requested ?? false,
+        })) as Appointment[];
+      }
+    }
+
+    // Ruta segura por RPC para evitar depender de SELECT directo sobre profiles
+    const { data: safeData, error: safeError } = await supabase.rpc('get_dashboard_appointments_safe');
+    if (!safeError && Array.isArray(safeData)) {
+      const filtered = clientId
+        ? (safeData as any[]).filter((d) => d.client_id === clientId)
+        : (safeData as any[]);
+
+      return filtered.map((d) => ({
+        id: d.id,
+        clientId: d.client_id,
+        clientName: d.client_name ?? '',
+        clientPhone: d.client_phone ?? '',
+        serviceId: d.service_id,
+        serviceName: d.service_name ?? '',
+        servicePrice: Number(d.service_price ?? 0),
+        stylistId: d.stylist_id,
+        stylistName: d.stylist_name ?? 'Sin asignar',
+        appointmentDate: d.appointment_date,
+        status: d.status,
+        paymentMethod: d.payment_method ?? 'efectivo',
+        isPaid: d.is_paid ?? false,
+        readyForBilling: d.ready_for_billing ?? false,
+        readyForBillingAt: d.ready_for_billing_at ?? null,
+        readyForBillingBy: d.ready_for_billing_by ?? null,
+        canceledAt: d.canceled_at ?? null,
+        canceledBy: d.canceled_by ?? null,
+        notes: d.notes ?? '',
+        salonId: d.salon_id,
+        salonName: d.salon_name ?? '',
+        allergies: d.allergies ?? '',
+        medicalConditions: d.medical_conditions ?? '',
+        medicalFormRequested: d.medical_form_requested ?? false,
+      })) as Appointment[];
+    }
+
     let query = supabase
       .from('appointments')
       .select('*, services(name, price), profiles!client_id(full_name, allergies, medical_conditions, medical_form_requested, phone), stylist:profiles!stylist_id(full_name), salons(name)');
 
-    if (userId) {
+    if (userId && !options?.skipSalonFilter) {
       const salonId = await api.getSalonId(userId);
       if (salonId) query = query.eq('salon_id', salonId);
     }
@@ -664,7 +1117,13 @@ export const api = {
     if (clientId) query = query.eq('client_id', clientId);
 
     const { data, error } = await query;
-    if (error) throw error;
+    if (error) {
+      const errorMessage = String((error as any)?.message || '').toLowerCase();
+      if (errorMessage.includes('infinite recursion detected')) {
+        throw new Error('Error de políticas RLS en perfiles. Ejecuta el esquema SQL más reciente de Supabase para corregir la recursión.');
+      }
+      throw error;
+    }
     return (data as any[]).map((d) => ({
       id: d.id,
       clientId: d.client_id,
@@ -679,6 +1138,11 @@ export const api = {
       status: d.status,
       paymentMethod: d.payment_method,
       isPaid: d.is_paid ?? false,
+      readyForBilling: d.ready_for_billing ?? false,
+      readyForBillingAt: d.ready_for_billing_at ?? null,
+      readyForBillingBy: d.ready_for_billing_by ?? null,
+      canceledAt: d.canceled_at ?? null,
+      canceledBy: d.canceled_by ?? null,
       notes: d.notes ?? '',
       salonId: d.salon_id,
       salonName: d.salons?.name ?? '',
@@ -699,21 +1163,24 @@ export const api = {
       salonId = await api.getSalonId(userId);
     }
 
-    const payload: any = {
-      client_id: appointment.clientId,
-      service_id: appointment.serviceId,
-      stylist_id: appointment.stylistId || null,
-      appointment_date: appointment.appointmentDate,
-      status: appointment.status || 'pendiente',
-      is_paid: appointment.isPaid ?? false,
-      payment_method: appointment.paymentMethod || 'efectivo',
-      notes: appointment.notes || null,
-      salon_id: salonId,
-    };
+    if (!salonId) {
+      const { data: currentRole } = await supabase.rpc('get_my_role');
+      if (currentRole === 'superadmin') {
+        throw new Error('Selecciona un salón antes de reservar la cita.');
+      }
+      throw new Error('Tu usuario no tiene salón asignado. Actualiza tu perfil para reservar citas.');
+    }
 
-    const { error } = await supabase
-      .from('appointments')
-      .insert(payload);
+    const { error } = await supabase.rpc('create_bookable_appointment', {
+      p_client_id: appointment.clientId,
+      p_service_id: appointment.serviceId,
+      p_stylist_id: appointment.stylistId || null,
+      p_appointment_date: appointment.appointmentDate,
+      p_status: appointment.status || 'pendiente',
+      p_payment_method: appointment.paymentMethod || 'efectivo',
+      p_notes: appointment.notes || null,
+      p_salon_id: salonId,
+    });
 
     if (error) throw error;
   },
@@ -1014,6 +1481,32 @@ export const api = {
     if (error) throw error;
   },
 
+  async markAppointmentReadyForBilling(id: string): Promise<void> {
+    if (!isSupabaseConfigured()) {
+      console.log(`Mock: Cita ${id} marcada lista para facturar`);
+      return;
+    }
+
+    const { error } = await supabase.rpc('mark_appointment_ready_for_billing', {
+      p_appointment_id: id,
+    });
+
+    if (error) throw error;
+  },
+
+  async cancelAppointment(id: string): Promise<void> {
+    if (!isSupabaseConfigured()) {
+      console.log(`Mock: Cita ${id} cancelada`);
+      return;
+    }
+
+    const { error } = await supabase.rpc('mark_appointment_cancelled', {
+      p_appointment_id: id,
+    });
+
+    if (error) throw error;
+  },
+
   async deleteAppointment(id: string): Promise<void> {
     if (!isSupabaseConfigured()) {
       console.log(`Mock: Cita ${id} eliminada`);
@@ -1029,11 +1522,44 @@ export const api = {
     if (error) throw error;
   },
 
-  async getUnpaidAppointments(date: string): Promise<Appointment[]> {
+  async getUnpaidAppointments(date: string, userId?: string): Promise<Appointment[]> {
     if (!isSupabaseConfigured()) {
       return mockAppointments.filter(a => 
-        a.appointmentDate.startsWith(date) && !a.isPaid && a.status !== 'cancelada'
+        a.appointmentDate.startsWith(date)
+        && !a.isPaid
+        && a.status !== 'cancelada'
+        && (a.readyForBilling ?? a.status === 'completada')
       );
+    }
+
+    const { data: rpcData, error: rpcError } = await supabase.rpc('get_ready_for_billing_appointments', {
+      p_date: date,
+    });
+
+    if (!rpcError && Array.isArray(rpcData)) {
+      return (rpcData as any[]).map((d) => ({
+        id: d.id,
+        clientId: d.client_id,
+        clientName: d.client_name ?? '',
+        serviceId: d.service_id,
+        serviceName: d.service_name ?? '',
+        servicePrice: d.service_price ?? 0,
+        serviceTaxTreatment: d.service_tax_treatment ?? 'gravado',
+        stylistId: d.stylist_id,
+        stylistName: d.stylist_name ?? 'Sin asignar',
+        appointmentDate: d.appointment_date,
+        status: d.status,
+        paymentMethod: d.payment_method,
+        isPaid: d.is_paid ?? false,
+        readyForBilling: d.ready_for_billing ?? false,
+        readyForBillingAt: d.ready_for_billing_at ?? null,
+        readyForBillingBy: d.ready_for_billing_by ?? null,
+        canceledAt: d.canceled_at ?? null,
+        canceledBy: d.canceled_by ?? null,
+        notes: d.notes ?? '',
+        salonId: d.salon_id,
+        salonName: d.salon_name ?? '',
+      })) as Appointment[];
     }
 
     const startOfDay = new Date(`${date}T00:00:00`).toISOString();
@@ -1043,9 +1569,49 @@ export const api = {
       .from('appointments')
       .select('*, services(name, price, tax_treatment), profiles!client_id(full_name), stylist:profiles!stylist_id(full_name)')
       .eq('is_paid', false)
+      .eq('ready_for_billing', true)
       .neq('status', 'cancelada')
       .gte('appointment_date', startOfDay)
       .lte('appointment_date', endOfDay);
+
+    if (!error && userId) {
+      const salonId = await api.getSalonId(userId);
+      if (salonId) {
+        const { data: scopedData, error: scopedError } = await supabase
+          .from('appointments')
+          .select('*, services(name, price, tax_treatment), profiles!client_id(full_name), stylist:profiles!stylist_id(full_name)')
+          .eq('is_paid', false)
+          .eq('ready_for_billing', true)
+          .neq('status', 'cancelada')
+          .eq('salon_id', salonId)
+          .gte('appointment_date', startOfDay)
+          .lte('appointment_date', endOfDay);
+        if (!scopedError) {
+          return (scopedData as any[]).map((d) => ({
+            id: d.id,
+            clientId: d.client_id,
+            clientName: d.profiles?.full_name ?? '',
+            serviceId: d.service_id,
+            serviceName: d.services?.name ?? '',
+            servicePrice: d.services?.price ?? 0,
+            serviceTaxTreatment: d.services?.tax_treatment ?? 'gravado',
+            stylistId: d.stylist_id,
+            stylistName: d.stylist?.full_name ?? 'Sin asignar',
+            appointmentDate: d.appointment_date,
+            status: d.status,
+            paymentMethod: d.payment_method,
+            isPaid: d.is_paid ?? false,
+            readyForBilling: d.ready_for_billing ?? false,
+            readyForBillingAt: d.ready_for_billing_at ?? null,
+            readyForBillingBy: d.ready_for_billing_by ?? null,
+            canceledAt: d.canceled_at ?? null,
+            canceledBy: d.canceled_by ?? null,
+            notes: d.notes ?? '',
+            salonId: d.salon_id,
+          })) as Appointment[];
+        }
+      }
+    }
 
     if (error) throw error;
     return (data as any[]).map((d) => ({
@@ -1062,6 +1628,11 @@ export const api = {
       status: d.status,
       paymentMethod: d.payment_method,
       isPaid: d.is_paid ?? false,
+      readyForBilling: d.ready_for_billing ?? false,
+      readyForBillingAt: d.ready_for_billing_at ?? null,
+      readyForBillingBy: d.ready_for_billing_by ?? null,
+      canceledAt: d.canceled_at ?? null,
+      canceledBy: d.canceled_by ?? null,
       notes: d.notes ?? '',
       salonId: d.salon_id,
     })) as Appointment[];
@@ -1243,9 +1814,58 @@ export const api = {
       salonId = await api.getSalonId(userId);
     }
 
+    if (!salonId) {
+      salonId =
+        sale.items
+          .map((item) => item.salonId)
+          .find((id): id is string => Boolean(id)) ?? null;
+    }
+
+    if (!salonId) {
+      const appointmentIds = sale.items
+        .map((item) => item.appointmentId)
+        .filter((id): id is string => Boolean(id));
+      const productIds = sale.items
+        .map((item) => item.productId)
+        .filter((id): id is string => Boolean(id));
+      const serviceIds = sale.items
+        .map((item) => item.serviceId)
+        .filter((id): id is string => Boolean(id));
+
+      if (appointmentIds.length > 0) {
+        const { data: apptRows } = await supabase
+          .from('appointments')
+          .select('salon_id')
+          .in('id', appointmentIds)
+          .not('salon_id', 'is', null)
+          .limit(1);
+        salonId = (apptRows?.[0] as any)?.salon_id ?? null;
+      }
+
+      if (!salonId && productIds.length > 0) {
+        const { data: productRows } = await supabase
+          .from('products')
+          .select('salon_id')
+          .in('id', productIds)
+          .not('salon_id', 'is', null)
+          .limit(1);
+        salonId = (productRows?.[0] as any)?.salon_id ?? null;
+      }
+
+      if (!salonId && serviceIds.length > 0) {
+        const { data: serviceRows } = await supabase
+          .from('services')
+          .select('salon_id')
+          .in('id', serviceIds)
+          .not('salon_id', 'is', null)
+          .limit(1);
+        salonId = (serviceRows?.[0] as any)?.salon_id ?? null;
+      }
+    }
+
     // Usar la función RPC 'process_sale' definida en el esquema SQL
     const { data, error } = await supabase.rpc('process_sale', {
-      p_client_id: sale.clientId,
+      p_client_id: sale.clientId ?? null,
       p_seller_id: sale.sellerId,
       p_payment_method: sale.paymentMethod,
       p_salon_id: salonId,
@@ -1420,28 +2040,28 @@ export const api = {
   async getStylistServiceReport(filters: StylistServiceReportFilters, userId?: string): Promise<StylistServiceReportRow[]> {
     const { startDate, endDate, status, includeClients = false } = filters;
 
-    if (!isSupabaseConfigured()) {
-      const inRange = (dateTime: string) => {
-        const dateOnly = dateTime.slice(0, 10);
-        return dateOnly >= startDate && dateOnly <= endDate;
-      };
+    const inRange = (dateTime: string) => {
+      const dateOnly = dateTime.slice(0, 10);
+      return dateOnly >= startDate && dateOnly <= endDate;
+    };
 
-      const filtered = mockAppointments.filter((a) => {
-        if (!inRange(a.appointmentDate)) return false;
-        if (status === 'pagados') return a.isPaid === true && a.status !== 'cancelada';
-        if (status === 'cancelados') return a.status === 'cancelada';
-        return true;
-      });
+    const matchesStatus = (a: Appointment) => {
+      if (status === 'pagados') return a.isPaid === true && a.status !== 'cancelada';
+      if (status === 'pendientes_facturar') return a.isPaid !== true && a.status !== 'cancelada' && a.readyForBilling === true;
+      if (status === 'cancelados') return a.status === 'cancelada';
+      return true;
+    };
 
+    const buildSummary = (appointments: Appointment[]) => {
       const reportMap = new Map<string, StylistServiceReportRow>();
-      filtered.forEach((a) => {
+      appointments.forEach((a) => {
         const stylistName = a.stylistName || 'Sin asignar';
-        const service = mockServices.find((s) => s.id === a.serviceId);
-        const serviceName = a.serviceName || service?.name || 'Servicio';
+        const serviceName = a.serviceName || 'Servicio';
         const serviceId = a.serviceId || 'sin-servicio';
-        const amount = service?.price || a.servicePrice || 0;
-        const key = `${stylistName}__${serviceId}`;
+        const amount = Number(a.servicePrice || 0);
+        const key = `${a.stylistId || stylistName}__${serviceId}`;
         const current: StylistServiceReportRow = reportMap.get(key) || {
+          stylistId: a.stylistId,
           stylistName,
           serviceId,
           serviceName,
@@ -1457,63 +2077,34 @@ export const api = {
         }
         reportMap.set(key, current);
       });
-
       return Array.from(reportMap.values()).sort((a, b) => b.totalAmount - a.totalAmount);
+    };
+
+    if (!isSupabaseConfigured()) {
+      const filtered = mockAppointments.filter((a) => {
+        if (!inRange(a.appointmentDate)) return false;
+        return matchesStatus(a);
+      });
+
+      return buildSummary(filtered);
     }
 
-    const startIso = new Date(`${startDate}T00:00:00`).toISOString();
-    const endIso = new Date(`${endDate}T23:59:59.999`).toISOString();
+    const details = await api.getStylistServiceReportDetails(filters, userId);
+    const asAppointments = details.map((row) => ({
+      id: row.appointmentId,
+      stylistId: row.stylistId,
+      stylistName: row.stylistName,
+      serviceId: row.serviceId,
+      serviceName: row.serviceName,
+      clientName: row.clientName || '',
+      servicePrice: row.amount + Number(row.discountAmount || 0),
+      appointmentDate: `${row.appointmentDate}T${row.appointmentTime}:00`,
+      status: row.status,
+      isPaid: row.isPaid,
+      readyForBilling: false,
+    })) as Appointment[];
 
-    let query = supabase
-      .from('appointments')
-      .select('id, service_id, is_paid, status, appointment_date, salon_id, services(name, price), stylist:profiles!stylist_id(id, full_name), client:profiles!client_id(full_name)')
-      .gte('appointment_date', startIso)
-      .lte('appointment_date', endIso)
-      .not('stylist_id', 'is', null);
-
-    if (status === 'pagados') {
-      query = query.eq('is_paid', true).neq('status', 'cancelada');
-    } else if (status === 'cancelados') {
-      query = query.eq('status', 'cancelada');
-    }
-
-    if (userId) {
-      const salonId = await api.getSalonId(userId);
-      if (salonId) query = query.eq('salon_id', salonId);
-    }
-
-    const { data, error } = await query;
-    if (error) throw error;
-
-    const reportMap = new Map<string, StylistServiceReportRow>();
-    (data as any[]).forEach((row) => {
-      const stylistId = row.stylist?.id as string | undefined;
-      const stylistName = row.stylist?.full_name || 'Sin asignar';
-      const serviceId = row.service_id || 'sin-servicio';
-      const serviceName = row.services?.name || 'Servicio';
-      const clientName = row.client?.full_name || '';
-      const amount = Number(row.services?.price || 0);
-      const key = `${stylistId || stylistName}__${serviceId}`;
-
-      const current: StylistServiceReportRow = reportMap.get(key) || {
-        stylistId,
-        stylistName,
-        serviceId,
-        serviceName,
-        appointmentsCount: 0,
-        totalAmount: 0,
-        clients: [] as string[],
-      };
-
-      current.appointmentsCount += 1;
-      current.totalAmount += amount;
-      if (includeClients && clientName && !current.clients?.includes(clientName)) {
-        current.clients?.push(clientName);
-      }
-      reportMap.set(key, current);
-    });
-
-    return Array.from(reportMap.values()).sort((a, b) => b.totalAmount - a.totalAmount);
+    return buildSummary(asAppointments);
   },
 
   async getStylistServiceReportDetails(filters: StylistServiceReportFilters, userId?: string): Promise<StylistServiceReportDetailRow[]> {
@@ -1524,17 +2115,151 @@ export const api = {
       return d.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', hour12: false });
     };
 
-    if (!isSupabaseConfigured()) {
-      const inRange = (dateTime: string) => {
-        const dateOnly = dateTime.slice(0, 10);
-        return dateOnly >= startDate && dateOnly <= endDate;
-      };
+    const inRange = (dateTime: string) => {
+      const dateOnly = dateTime.slice(0, 10);
+      return dateOnly >= startDate && dateOnly <= endDate;
+    };
 
+    const matchesStatus = (a: Appointment) => {
+      if (status === 'pagados') return a.isPaid === true && a.status !== 'cancelada';
+      if (status === 'pendientes_facturar') return a.isPaid !== true && a.status !== 'cancelada' && a.readyForBilling === true;
+      if (status === 'cancelados') return a.status === 'cancelada';
+      return true;
+    };
+
+    const buildFromAppointments = async () => {
+      let appointments: Appointment[] = [];
+      try {
+        appointments = await api.getAppointments(userId);
+      } catch {
+        let salonId: string | null = null;
+        if (userId) salonId = await api.getSalonId(userId);
+
+        let query = supabase
+          .from('appointments')
+          .select('id, client_id, service_id, stylist_id, appointment_date, status, is_paid, ready_for_billing, ready_for_billing_at, salon_id')
+          .gte('appointment_date', `${startDate}T00:00:00`)
+          .lte('appointment_date', `${endDate}T23:59:59.999`)
+          .order('appointment_date', { ascending: false });
+
+        if (salonId) query = query.eq('salon_id', salonId);
+
+        const { data: minimalData, error: minimalError } = await query;
+        if (minimalError) {
+          const { data: superData, error: superError } = await supabase.rpc('get_superadmin_calendar_appointments');
+          if (!superError) {
+            appointments = ((superData as any[]) || []).map((row) => ({
+              id: row.id,
+              clientId: row.client_id,
+              clientName: row.client_name || '',
+              serviceId: row.service_id,
+              serviceName: row.service_name || 'Servicio',
+              servicePrice: Number(row.service_price || 0),
+              stylistId: row.stylist_id || undefined,
+              stylistName: row.stylist_name || 'Sin asignar',
+              appointmentDate: row.appointment_date,
+              status: row.status,
+              paymentMethod: row.payment_method || 'efectivo',
+              isPaid: Boolean(row.is_paid),
+              readyForBilling: Boolean(row.ready_for_billing),
+              readyForBillingAt: row.ready_for_billing_at ?? null,
+              salonId: row.salon_id,
+            } as Appointment));
+          } else {
+            return [] as StylistServiceReportDetailRow[];
+          }
+        } else {
+          const [services, stylists] = await Promise.all([
+            api.getBookableServices(userId, salonId ?? undefined).catch(() => [] as Service[]),
+            api.getStylists(userId, salonId ?? undefined).catch(() => [] as Stylist[]),
+          ]);
+          const serviceById = new Map(services.map((s) => [s.id, s]));
+          const stylistById = new Map(stylists.map((s) => [s.id, s]));
+
+          appointments = ((minimalData as any[]) || []).map((row) => {
+            const service = serviceById.get(row.service_id);
+            const stylist = row.stylist_id ? stylistById.get(row.stylist_id) : undefined;
+            return {
+              id: row.id,
+              clientId: row.client_id,
+              clientName: '',
+              serviceId: row.service_id,
+              serviceName: service?.name || 'Servicio',
+              servicePrice: Number(service?.price || 0),
+              stylistId: row.stylist_id || undefined,
+              stylistName: stylist?.name || 'Sin asignar',
+              appointmentDate: row.appointment_date,
+              status: row.status,
+              paymentMethod: 'efectivo',
+              isPaid: Boolean(row.is_paid),
+              readyForBilling: Boolean(row.ready_for_billing),
+              readyForBillingAt: row.ready_for_billing_at ?? null,
+              salonId: row.salon_id,
+            } as Appointment;
+          });
+        }
+      }
+
+      const filteredAppointments = appointments
+        .filter((a) => inRange(a.appointmentDate) && matchesStatus(a))
+        .sort((a, b) => new Date(b.appointmentDate).getTime() - new Date(a.appointmentDate).getTime());
+
+      const appointmentIds = filteredAppointments.map((a) => a.id).filter(Boolean);
+      const appointmentMetaById = new Map<string, { invoiceNumber?: string; discountPercentage: number; discountAmount: number; paidAt?: string | null }>();
+      if (appointmentIds.length > 0) {
+        const { data: saleItemsData, error: saleItemsError } = await supabase
+          .from('sale_items')
+          .select('appointment_id, discount_percentage, discount_amount, sale:product_sales!sale_id(invoice_number, created_at)')
+          .in('appointment_id', appointmentIds);
+
+        if (!saleItemsError) {
+          (saleItemsData as any[]).forEach((item) => {
+            const appointmentId = item.appointment_id as string | undefined;
+            const invoiceNumber = item.sale?.invoice_number as string | undefined;
+            const paidAt = item.sale?.created_at as string | undefined;
+            if (appointmentId && !appointmentMetaById.has(appointmentId)) {
+              appointmentMetaById.set(appointmentId, {
+                invoiceNumber,
+                discountPercentage: Number(item.discount_percentage || 0),
+                discountAmount: Number(item.discount_amount || 0),
+                paidAt: paidAt ?? null,
+              });
+            }
+          });
+        }
+      }
+
+      return filteredAppointments.map((a) => {
+        const dateObj = new Date(a.appointmentDate);
+        const appointmentMeta = appointmentMetaById.get(a.id);
+        const discountPercentage = Number(appointmentMeta?.discountPercentage || 0);
+        const discountAmount = Number(appointmentMeta?.discountAmount || 0);
+        const grossAmount = Number(a.servicePrice || 0);
+        return {
+          appointmentId: a.id,
+          invoiceNumber: appointmentMeta?.invoiceNumber,
+          discountPercentage,
+          discountAmount,
+          stylistId: a.stylistId,
+          stylistName: a.stylistName || 'Sin asignar',
+          serviceId: a.serviceId || 'sin-servicio',
+          serviceName: a.serviceName || 'Servicio',
+          clientName: a.clientName || '',
+          appointmentDate: dateObj.toLocaleDateString('sv'),
+          appointmentTime: toTime(a.appointmentDate),
+          completedAt: a.readyForBillingAt ?? null,
+          paidAt: appointmentMeta?.paidAt ?? null,
+          status: a.status,
+          isPaid: Boolean(a.isPaid),
+          amount: grossAmount - discountAmount,
+        } as StylistServiceReportDetailRow;
+      });
+    };
+
+    if (!isSupabaseConfigured()) {
       const filtered = mockAppointments.filter((a) => {
         if (!inRange(a.appointmentDate)) return false;
-        if (status === 'pagados') return a.isPaid === true && a.status !== 'cancelada';
-        if (status === 'cancelados') return a.status === 'cancelada';
-        return true;
+        return matchesStatus(a);
       });
 
       return filtered
@@ -1560,6 +2285,8 @@ export const api = {
             clientName: a.clientName || '',
             appointmentDate: fullDate.toLocaleDateString('sv'),
             appointmentTime: toTime(a.appointmentDate),
+            completedAt: a.readyForBillingAt ?? (a.status === 'completada' ? a.appointmentDate : null),
+            paidAt: a.isPaid ? a.appointmentDate : null,
             status: a.status,
             isPaid: Boolean(a.isPaid),
             amount: baseAmount - mockDiscountAmount,
@@ -1568,77 +2295,48 @@ export const api = {
         .sort((a, b) => `${b.appointmentDate} ${b.appointmentTime}`.localeCompare(`${a.appointmentDate} ${a.appointmentTime}`));
     }
 
-    const startIso = new Date(`${startDate}T00:00:00`).toISOString();
-    const endIso = new Date(`${endDate}T23:59:59.999`).toISOString();
-
-    let query = supabase
-      .from('appointments')
-      .select('id, service_id, is_paid, status, appointment_date, salon_id, services(name, price), stylist:profiles!stylist_id(id, full_name), client:profiles!client_id(full_name)')
-      .gte('appointment_date', startIso)
-      .lte('appointment_date', endIso)
-      .not('stylist_id', 'is', null)
-      .order('appointment_date', { ascending: false });
-
-    if (status === 'pagados') {
-      query = query.eq('is_paid', true).neq('status', 'cancelada');
-    } else if (status === 'cancelados') {
-      query = query.eq('status', 'cancelada');
-    }
-
-    if (userId) {
-      const salonId = await api.getSalonId(userId);
-      if (salonId) query = query.eq('salon_id', salonId);
-    }
-
-    const { data, error } = await query;
-    if (error) throw error;
-
-    const appointmentIds = (data as any[]).map((row) => row.id).filter(Boolean);
-    const appointmentMetaById = new Map<string, { invoiceNumber?: string; discountPercentage: number; discountAmount: number }>();
-    if (appointmentIds.length > 0) {
-      const { data: saleItemsData, error: saleItemsError } = await supabase
-        .from('sale_items')
-        .select('appointment_id, discount_percentage, discount_amount, sale:product_sales!sale_id(invoice_number)')
-        .in('appointment_id', appointmentIds);
-
-      if (saleItemsError) throw saleItemsError;
-      (saleItemsData as any[]).forEach((item) => {
-        const appointmentId = item.appointment_id as string | undefined;
-        const invoiceNumber = item.sale?.invoice_number as string | undefined;
-        if (appointmentId && !appointmentMetaById.has(appointmentId)) {
-          appointmentMetaById.set(appointmentId, {
-            invoiceNumber,
-            discountPercentage: Number(item.discount_percentage || 0),
-            discountAmount: Number(item.discount_amount || 0),
-          });
-        }
+    try {
+      const { data, error } = await supabase.rpc('get_stylist_service_report_appointments', {
+        p_start_date: startDate,
+        p_end_date: endDate,
+        p_status: status,
       });
+
+      if (!error) {
+        return ((data as any[]) || []).map((row) => {
+          const dateObj = new Date(row.appointment_date as string);
+          const discountPercentage = Number(row.discount_percentage || 0);
+          const discountAmount = Number(row.discount_amount || 0);
+          const grossAmount = Number(row.service_price || 0);
+          return {
+            appointmentId: row.appointment_id,
+            invoiceNumber: row.invoice_number || undefined,
+            discountPercentage,
+            discountAmount,
+            stylistId: row.stylist_id || undefined,
+            stylistName: row.stylist_name || 'Sin asignar',
+            serviceId: row.service_id || 'sin-servicio',
+            serviceName: row.service_name || 'Servicio',
+            clientName: row.client_name || '',
+            appointmentDate: dateObj.toLocaleDateString('sv'),
+            appointmentTime: toTime(row.appointment_date as string),
+            completedAt: row.completed_at ?? null,
+            paidAt: row.paid_at ?? null,
+            status: row.appointment_status,
+            isPaid: Boolean(row.is_paid),
+            amount: grossAmount - discountAmount,
+          } as StylistServiceReportDetailRow;
+        });
+      }
+    } catch {
+      // fallback below
     }
 
-    return (data as any[]).map((row) => {
-      const appointmentDateRaw = row.appointment_date as string;
-      const dateObj = new Date(appointmentDateRaw);
-      const appointmentMeta = appointmentMetaById.get(row.id);
-      const discountPercentage = Number(appointmentMeta?.discountPercentage || 0);
-      const discountAmount = Number(appointmentMeta?.discountAmount || 0);
-      const grossAmount = Number(row.services?.price || 0);
-      return {
-        appointmentId: row.id,
-        invoiceNumber: appointmentMeta?.invoiceNumber,
-        discountPercentage,
-        discountAmount,
-        stylistId: row.stylist?.id as string | undefined,
-        stylistName: row.stylist?.full_name || 'Sin asignar',
-        serviceId: row.service_id || 'sin-servicio',
-        serviceName: row.services?.name || 'Servicio',
-        clientName: row.client?.full_name || '',
-        appointmentDate: dateObj.toLocaleDateString('sv'),
-        appointmentTime: toTime(appointmentDateRaw),
-        status: row.status,
-        isPaid: Boolean(row.is_paid),
-        amount: grossAmount - discountAmount,
-      } as StylistServiceReportDetailRow;
-    });
+    try {
+      return await buildFromAppointments();
+    } catch {
+      return [];
+    }
   },
 
   async getProductsSoldReportDetails(filters: ProductSoldReportFilters, userId?: string): Promise<ProductSoldReportDetailRow[]> {
