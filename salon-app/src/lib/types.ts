@@ -163,6 +163,7 @@ export interface SaleItem {
   taxTreatment?: TaxTreatment;
   appointmentId?: string;
   serviceId?: string;
+  salonId?: string;
 }
 
 export interface ProductSale {
@@ -190,6 +191,11 @@ export interface Appointment {
   status: AppointmentStatus;
   paymentMethod: PaymentMethod;
   isPaid: boolean;
+  readyForBilling?: boolean;
+  readyForBillingAt?: string | null;
+  readyForBillingBy?: string | null;
+  canceledAt?: string | null;
+  canceledBy?: string | null;
   notes?: string;
   salonId?: string;
   salonName?: string;
@@ -225,7 +231,7 @@ export interface DailyReportSummary {
   topStylist?: { name: string; amount: number };
 }
 
-export type StylistServiceReportStatus = 'pagados' | 'cancelados' | 'todos';
+export type StylistServiceReportStatus = 'pagados' | 'pendientes_facturar' | 'cancelados' | 'todos';
 
 export interface StylistServiceReportFilters {
   startDate: string;
@@ -256,6 +262,8 @@ export interface StylistServiceReportDetailRow {
   clientName?: string;
   appointmentDate: string;
   appointmentTime: string;
+  completedAt?: string | null;
+  paidAt?: string | null;
   status: AppointmentStatus;
   isPaid: boolean;
   amount: number;

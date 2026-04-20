@@ -29,7 +29,7 @@ export default function DashboardView({ onNavigate, userId }: DashboardViewProps
       try {
         setLoading(true);
         const [appts, svcs] = await Promise.all([
-          api.getAppointments(undefined, userId),
+          api.getDashboardAppointments(),
           api.getServices(userId),
         ]);
         setAppointments(appts);

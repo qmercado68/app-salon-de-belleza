@@ -42,7 +42,7 @@ export default function ReportsView({ userId }: ReportsViewProps) {
   const [stylistFilters, setStylistFilters] = useState<StylistServiceReportFilters>({
     startDate: startMonth.toLocaleDateString('sv'),
     endDate: today,
-    status: 'pagados',
+    status: 'todos',
     includeClients: false,
   });
   const [stylistDetailRows, setStylistDetailRows] = useState<StylistServiceReportDetailRow[]>([]);
@@ -205,6 +205,13 @@ export default function ReportsView({ userId }: ReportsViewProps) {
     return 'Pendiente';
   };
 
+  const formatDateTime = (value?: string | null) => {
+    if (!value) return '—';
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return '—';
+    return format(d, 'dd/MM/yyyy HH:mm');
+  };
+
   const handleExportStylistExcel = async () => {
     if (!stylistDetailRows.length) return;
     const XLSX = await import('xlsx');
@@ -216,6 +223,8 @@ export default function ReportsView({ userId }: ReportsViewProps) {
       Hora: row.appointmentTime,
       Estado: appointmentStatusLabel(row.status),
       Pago: row.isPaid ? 'Pagado' : 'No pagado',
+      Completada: formatDateTime(row.completedAt),
+      Pagada: formatDateTime(row.paidAt),
       'Desc. %': Number(row.discountPercentage || 0),
       Descuento: Number(row.discountAmount || 0),
       Valor: row.amount,
@@ -573,6 +582,7 @@ export default function ReportsView({ userId }: ReportsViewProps) {
                 className={styles.select}
               >
                 <option value="pagados">Pagados</option>
+                <option value="pendientes_facturar">Pendientes por facturar</option>
                 <option value="cancelados">Cancelados</option>
                 <option value="todos">Todos</option>
               </select>
@@ -617,6 +627,8 @@ export default function ReportsView({ userId }: ReportsViewProps) {
                     <th>Hora</th>
                     <th>Estado</th>
                     <th>Pago</th>
+                    <th>Completada</th>
+                    <th>Pagada</th>
                     <th>Desc. %</th>
                     <th>Descuento</th>
                     <th>Valor</th>
@@ -633,6 +645,8 @@ export default function ReportsView({ userId }: ReportsViewProps) {
                       <td>{row.appointmentTime}</td>
                       <td>{appointmentStatusLabel(row.status)}</td>
                       <td>{row.isPaid ? 'Pagado' : 'No pagado'}</td>
+                      <td>{formatDateTime(row.completedAt)}</td>
+                      <td>{formatDateTime(row.paidAt)}</td>
                       <td>{Number(row.discountPercentage || 0).toFixed(2)}%</td>
                       <td>${Number(row.discountAmount || 0).toLocaleString()}</td>
                       <td className={styles.amount}>${row.amount.toLocaleString()}</td>

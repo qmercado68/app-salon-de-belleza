@@ -103,7 +103,7 @@ export default function POSView({ userId }: POSViewProps) {
     const loadAppointments = async () => {
       try {
         setLoadingAppointments(true);
-        const data = await api.getUnpaidAppointments(selectedDate);
+        const data = await api.getUnpaidAppointments(selectedDate, userId);
         setPendingAppointments(data);
       } catch (err) {
         console.error('Error loading appointments:', err);
@@ -165,6 +165,7 @@ export default function POSView({ userId }: POSViewProps) {
         subtotal: calculateLineSubtotal(1, product.price, 0),
         discountPercentage: 0,
         taxTreatment: product.taxTreatment || 'gravado',
+        salonId: product.salonId,
       }]);
     }
   };
@@ -185,6 +186,7 @@ export default function POSView({ userId }: POSViewProps) {
       subtotal: calculateLineSubtotal(1, appt.servicePrice || 0, 0),
       discountPercentage: 0,
       taxTreatment: appt.serviceTaxTreatment || 'gravado',
+      salonId: appt.salonId,
     }]);
   };
 
@@ -256,11 +258,15 @@ export default function POSView({ userId }: POSViewProps) {
 
   const handleCheckout = async () => {
     if (cart.length === 0 || isProcessing) return;
+    if (!userId) {
+      alert('No hay sesión activa para procesar la venta.');
+      return;
+    }
 
     setIsProcessing(true);
     try {
       const result = await api.processSale({
-        sellerId: userId || 'anonymous',
+        sellerId: userId,
         totalAmount: total,
         paymentMethod: paymentMethod,
         items: cart
@@ -316,7 +322,7 @@ export default function POSView({ userId }: POSViewProps) {
           <div className={styles.sectionHeader}>
             <div className={styles.sectionTitle}>
               <Calendar size={18} />
-              Citas por cobrar
+              Citas listas para facturar
             </div>
             <div className={styles.sectionHint}>
               {selectedDate === new Date().toLocaleDateString('sv') ? 'Hoy' : selectedDate}
@@ -376,7 +382,7 @@ export default function POSView({ userId }: POSViewProps) {
             {!loadingAppointments && filteredAppointments.length === 0 && (
               <div className={styles.noAppointments}>
                 <Calendar size={48} strokeWidth={1} />
-                <p>No hay citas pendientes para {selectedDate === new Date().toLocaleDateString('sv') ? 'hoy' : selectedDate}.</p>
+                <p>No hay citas autorizadas para facturar en {selectedDate === new Date().toLocaleDateString('sv') ? 'hoy' : selectedDate}.</p>
               </div>
             )}
           </div>

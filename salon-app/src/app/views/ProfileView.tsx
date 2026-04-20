@@ -125,8 +125,8 @@ export default function ProfileView({ userId, userEmail, initialProfile, current
       await api.updateProfile(payload);
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
-    } catch (err) {
-      setError('No se pudieron guardar los cambios. Intenta de nuevo.');
+    } catch (err: any) {
+      setError(err?.message ?? 'No se pudieron guardar los cambios. Intenta de nuevo.');
     } finally {
       setSaving(false);
     }

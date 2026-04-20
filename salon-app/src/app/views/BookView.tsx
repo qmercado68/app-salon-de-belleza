@@ -52,6 +52,7 @@ export default function BookView({ onSuccess, userId, userRole }: BookViewProps)
   const [selectedDate, setSelectedDate] = useState(() => new Date().toLocaleDateString('sv'));
   const [selectedTime, setSelectedTime] = useState('');
   const [isBooked, setIsBooked] = useState(false);
+  const [bookingError, setBookingError] = useState<string | null>(null);
 
   // Salon selection (superadmin)
   const [salons, setSalons] = useState<Salon[]>([]);
@@ -77,6 +78,10 @@ export default function BookView({ onSuccess, userId, userRole }: BookViewProps)
 
   // The effective salonId for filtering
   const effectiveSalonId = isSuperadmin ? selectedSalon?.id : undefined;
+  const salonsById = useMemo(
+    () => new Map(salons.map((s) => [s.id, s.name])),
+    [salons]
+  );
 
   // 1. Load salons for superadmin
   useEffect(() => {
@@ -102,13 +107,11 @@ export default function BookView({ onSuccess, userId, userRole }: BookViewProps)
       const fetch = async () => {
         try {
           setLoadingClients(true);
-          const data = await api.getAllProfiles();
-          // For superadmin, filter by selected salon
-          if (isSuperadmin && effectiveSalonId) {
-            setClients(data.filter(p => p.salonId === effectiveSalonId));
-          } else {
-            setClients(data);
+          let data = await api.getBookableClients(userId, effectiveSalonId);
+          if (isSuperadmin && effectiveSalonId && data.length === 0) {
+            data = await api.getBookableClients(userId);
           }
+          setClients(data);
         } catch (err) {
           console.error('Error al cargar clientes:', err);
         } finally {
@@ -134,8 +137,8 @@ export default function BookView({ onSuccess, userId, userRole }: BookViewProps)
       const fetch = async () => {
         try {
           setLoadingServices(true);
-          const data = await api.getServices(userId, effectiveSalonId);
-          setServices(data.filter(s => s.isActive));
+          const data = await api.getBookableServices(userId, effectiveSalonId);
+          setServices(data.filter((s) => s.isActive !== false));
         } catch (err) {
           console.error('Error al cargar servicios:', err);
         } finally {
@@ -159,7 +162,10 @@ export default function BookView({ onSuccess, userId, userRole }: BookViewProps)
       const fetch = async () => {
         try {
           setLoadingStylists(true);
-          const data = await api.getStylists(userId, effectiveSalonId);
+          let data = await api.getStylists(userId, effectiveSalonId);
+          if (isSuperadmin && effectiveSalonId && data.length === 0) {
+            data = await api.getStylists(userId);
+          }
           setStylists(data);
         } catch (err) {
           console.error('Error al cargar estilistas:', err);
@@ -169,7 +175,7 @@ export default function BookView({ onSuccess, userId, userRole }: BookViewProps)
       };
       fetch();
     }
-  }, [step, userId, effectiveSalonId]);
+  }, [step, userId, effectiveSalonId, isSuperadmin]);
 
   const filteredStylists = useMemo(() => {
     return stylists.filter(s =>
@@ -231,6 +237,7 @@ export default function BookView({ onSuccess, userId, userRole }: BookViewProps)
     if (!selectedService) return;
     const clientId = isStaff && selectedClient ? selectedClient.id : userId;
     try {
+      setBookingError(null);
       await api.createAppointment(
         {
           clientId,
@@ -248,8 +255,9 @@ export default function BookView({ onSuccess, userId, userRole }: BookViewProps)
       );
       setIsBooked(true);
       setTimeout(() => onSuccess(), 2000);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error al crear cita:', err);
+      setBookingError(err?.message || 'No se pudo reservar la cita.');
     }
   };
 
@@ -287,6 +295,12 @@ export default function BookView({ onSuccess, userId, userRole }: BookViewProps)
           );
         })}
       </div>
+
+      {bookingError && (
+        <div style={{ marginBottom: '1rem', color: 'var(--danger-600)', fontWeight: 600 }}>
+          {bookingError}
+        </div>
+      )}
 
       {/* Step: Select Salon (superadmin only) */}
       {step === 'salon' && isSuperadmin && (
@@ -362,6 +376,9 @@ export default function BookView({ onSuccess, userId, userRole }: BookViewProps)
                     <span className={styles.stylistSpecialty}>
                       {client.role === 'client' ? 'Cliente' : client.role === 'admin' ? 'Admin' : client.role === 'stylist' ? 'Estilista' : client.role}
                     </span>
+                    {client.salonId && salonsById.get(client.salonId) && (
+                      <span className={styles.stylistDesc}>Salón: {salonsById.get(client.salonId)}</span>
+                    )}
                     {client.phone && <span className={styles.stylistDesc}>{client.phone}</span>}
                   </div>
                 </div>

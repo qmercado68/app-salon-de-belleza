@@ -52,7 +52,7 @@ export default function AdminServicesView({ currentViewerRole, userId }: AdminSe
     try {
       setLoading(true);
       const [data, salonsList] = await Promise.all([
-        api.getServices(userId),
+        api.getManageableServices(userId),
         api.getSalons(),
       ]);
       setServices(data);
