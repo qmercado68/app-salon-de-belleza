@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 // The client you created in Step 1
 import { createClient } from '@/utils/supabase/server'
+import { parseFullName } from '@/lib/name'
 
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url)
@@ -15,21 +16,42 @@ export async function GET(request: NextRequest) {
     if (!error) {
       // If the magic link carried a salon_id, associate the client with that salon.
       // Only update if the profile does not already have a salon_id (idempotent).
-      if (salonId) {
-        const { data: { user } } = await supabase.auth.getUser()
-        if (user) {
-          const { data: profile } = await supabase
-            .from('profiles')
-            .select('salon_id')
-            .eq('id', user.id)
-            .single()
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) {
+        // Wait a small moment or perform a check to ensure the trigger...
+        const { data: profile, error: profileError } = await supabase
+          .from('profiles')
+          .select('id, salon_id')
+          .eq('id', user.id)
+          .single()
 
-          if (!profile?.salon_id) {
-            await supabase
-              .from('profiles')
-              .update({ salon_id: salonId })
-              .eq('id', user.id)
-          }
+        if (profileError && profileError.code === 'PGRST116') {
+          // If profile doesn't exist yet, we try to create it manually as a fallback 
+          // (though the trigger should handle it, this is for maximum robustness)
+          const { count } = await supabase
+            .from('profiles')
+            .select('id', { count: 'exact', head: true });
+
+          const derivedFullName = user.user_metadata?.full_name || user.email?.split('@')[0] || 'Nuevo Usuario';
+          const nameParts = parseFullName(derivedFullName);
+
+          await supabase.from('profiles').insert({
+            id: user.id,
+            email: user.email,
+            full_name: derivedFullName,
+            first_name: nameParts.firstName || null,
+            second_name: nameParts.secondName || null,
+            last_name: nameParts.lastName || null,
+            second_last_name: nameParts.secondLastName || null,
+            role: (count === 0) ? 'admin' : 'client'
+          })
+        }
+
+        if (salonId && (!profile || !profile.salon_id)) {
+          await supabase
+            .from('profiles')
+            .update({ salon_id: salonId })
+            .eq('id', user.id)
         }
       }
 

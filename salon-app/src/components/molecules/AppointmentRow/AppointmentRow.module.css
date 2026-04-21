@@ -31,7 +31,32 @@
 
 .client {
   font-size: var(--text-xs);
-  color: var(--neutral-500);
+  color: var(--neutral-600);
+  font-weight: 500;
+}
+
+.phoneLink {
+  font-size: 10px;
+  color: var(--primary-600);
+  text-decoration: none;
+  margin-top: 1px;
+}
+
+.phoneLink:hover {
+  text-decoration: underline;
+}
+
+.medicalAlert {
+  margin-top: 6px;
+  padding: 6px 8px;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  font-size: 10px;
+  color: #b91c1c;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
 .dateCol {

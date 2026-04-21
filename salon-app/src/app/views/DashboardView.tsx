@@ -29,13 +29,13 @@ export default function DashboardView({ onNavigate, userId }: DashboardViewProps
       try {
         setLoading(true);
         const [appts, svcs] = await Promise.all([
-          api.getAppointments(undefined, userId),
+          api.getDashboardAppointments(),
           api.getServices(userId),
         ]);
         setAppointments(appts);
         setServices(svcs);
-      } catch (err) {
-        console.error('Error al cargar datos del dashboard:', err);
+      } catch (err: any) {
+        console.error('Error detallado al cargar datos del dashboard:', err.message || err.details || err.hint || err);
       } finally {
         setLoading(false);
       }
@@ -44,7 +44,7 @@ export default function DashboardView({ onNavigate, userId }: DashboardViewProps
   }, [userId]);
 
   // Calculate stats from real data
-  const today = new Date().toISOString().split('T')[0];
+  const today = new Date().toLocaleDateString('sv');
   const stats: DashboardStats = {
     todayAppointments: appointments.filter(
       (a) => a.appointmentDate?.startsWith(today)
@@ -53,10 +53,18 @@ export default function DashboardView({ onNavigate, userId }: DashboardViewProps
     completedAppointments: appointments.filter((a) => a.status === 'completada').length,
     monthlyRevenue: appointments
       .filter((a) => a.status === 'completada' && a.isPaid)
-      .reduce((sum) => sum, 0),
+      .reduce((sum, a) => sum + (a.servicePrice || 0), 0),
     totalClients: new Set(appointments.map((a) => a.clientId)).size,
     popularService: services[0]?.name || '—',
   };
+
+  const newClientsCount = appointments.length > 0 
+    ? new Set(appointments.filter(a => {
+        const sevenDaysAgo = new Date();
+        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+        return new Date(a.appointmentDate) > sevenDaysAgo;
+      }).map(a => a.clientId)).size
+    : 0;
 
   const todayAppointments = appointments.filter(
     (a) => a.status === 'pendiente' || a.status === 'confirmada'
@@ -80,17 +88,18 @@ export default function DashboardView({ onNavigate, userId }: DashboardViewProps
           color="purple"
         />
         <StatCard
-          icon={<Clock size={22} />}
-          value={stats.pendingAppointments}
-          label="Pendientes"
-          color="orange"
+          icon={<Users size={22} />}
+          value={newClientsCount}
+          label="Nuevos (7d)"
+          trend={{ value: 5, isPositive: true }}
+          color="blue"
         />
         <StatCard
           icon={<Users size={22} />}
           value={stats.totalClients}
           label="Clientes Totales"
           trend={{ value: 8, isPositive: true }}
-          color="blue"
+          color="purple"
         />
         <StatCard
           icon={<DollarSign size={22} />}
@@ -148,7 +157,7 @@ export default function DashboardView({ onNavigate, userId }: DashboardViewProps
               <h2 className={styles.cardTitle}>Servicios Populares</h2>
               <p className={styles.cardSubtitle}>Los más solicitados este mes</p>
             </div>
-            <Button variant="ghost" size="sm" onClick={() => onNavigate('services')}>
+            <Button variant="ghost" size="sm" onClick={() => onNavigate('book')}>
               Ver catálogo
             </Button>
           </div>
