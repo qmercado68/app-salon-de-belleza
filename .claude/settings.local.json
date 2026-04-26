@@ -8,7 +8,10 @@
       "Bash(git commit -m ' *)",
       "mcp__engram__mem_save",
       "Bash(npx tsc *)",
-      "Bash(git *)"
+      "Bash(git *)",
+      "Bash(ssh -T git@github-personal)",
+      "Bash(ssh -T -v git@github-personal)",
+      "Bash(ssh-keygen *)"
     ]
   }
 }
