@@ -47,7 +47,7 @@ export default function BookView({ onSuccess, userId, userRole }: BookViewProps)
   const { labels: stepLabels, keys: stepKeys } = getStepList(userRole);
 
   const [step, setStep] = useState<Step>(stepKeys[0]);
-  const [selectedService, setSelectedService] = useState<Service | null>(null);
+  const [selectedServices, setSelectedServices] = useState<Service[]>([]);
   const [selectedStylist, setSelectedStylist] = useState<Stylist | null>(null);
   const [selectedDate, setSelectedDate] = useState(() => new Date().toLocaleDateString('sv'));
   const [selectedTime, setSelectedTime] = useState('');
@@ -184,9 +184,13 @@ export default function BookView({ onSuccess, userId, userRole }: BookViewProps)
     );
   }, [stylists, stylistQuery]);
 
+  // Derived: total duration and price from all selected services
+  const totalDurationMinutes = selectedServices.reduce((sum, s) => sum + s.durationMinutes, 0);
+  const totalPrice = selectedServices.reduce((sum, s) => sum + s.price, 0);
+
   // 5. Load time slots
   useEffect(() => {
-    if (step === 'datetime' && selectedStylist && selectedService) {
+    if (step === 'datetime' && selectedStylist && selectedServices.length > 0) {
       const fetch = async () => {
         try {
           setLoadingTimeSlots(true);
@@ -195,7 +199,7 @@ export default function BookView({ onSuccess, userId, userRole }: BookViewProps)
           const slots = await api.getAvailableTimeSlots(
             selectedDate,
             selectedStylist.id,
-            selectedService.durationMinutes,
+            totalDurationMinutes,
             workStart,
             workEnd,
             selectedStylist.breakStartTime,
@@ -211,7 +215,7 @@ export default function BookView({ onSuccess, userId, userRole }: BookViewProps)
       };
       fetch();
     }
-  }, [step, selectedDate, selectedStylist, selectedService]);
+  }, [step, selectedDate, selectedStylist, selectedServices, totalDurationMinutes]);
 
   // Calendar days
   const today = new Date();
@@ -234,15 +238,17 @@ export default function BookView({ onSuccess, userId, userRole }: BookViewProps)
   };
 
   const handleConfirm = async () => {
-    if (!selectedService) return;
+    if (selectedServices.length === 0) return;
     const clientId = isStaff && selectedClient ? selectedClient.id : userId;
+    const primaryService = selectedServices[0];
     try {
       setBookingError(null);
       await api.createAppointment(
         {
           clientId,
-          serviceId: selectedService.id,
-          serviceName: selectedService.name,
+          serviceId: primaryService.id,
+          serviceIds: selectedServices.map((s) => s.id),
+          serviceName: selectedServices.map((s) => s.name).join(', '),
           stylistId: selectedStylist?.id,
           stylistName: selectedStylist?.name,
           appointmentDate: new Date(`${selectedDate}T${selectedTime}:00`).toISOString(),
@@ -269,7 +275,7 @@ export default function BookView({ onSuccess, userId, userRole }: BookViewProps)
             <Check size={40} />
           </div>
           <h2>¡Cita Reservada!</h2>
-          <p>{selectedService?.name}</p>
+          <p>{selectedServices.map((s) => s.name).join(', ')}</p>
           <p className={styles.successDate}>{selectedDate} a las {selectedTime}</p>
           {selectedSalon && <p style={{ fontSize: '0.85rem', color: 'var(--neutral-500)' }}>{selectedSalon.name}</p>}
           <p className={styles.successNote}>
@@ -319,7 +325,7 @@ export default function BookView({ onSuccess, userId, userRole }: BookViewProps)
                     setSelectedSalon(salon);
                     // Reset dependent selections
                     setSelectedClient(null);
-                    setSelectedService(null);
+                    setSelectedServices([]);
                     setSelectedStylist(null);
                     setSelectedTime('');
                   }}
@@ -407,10 +413,15 @@ export default function BookView({ onSuccess, userId, userRole }: BookViewProps)
         </div>
       )}
 
-      {/* Step: Select Service (Enhanced Catalog) */}
+      {/* Step: Select Service (Enhanced Catalog — multi-select) */}
       {step === 'service' && (
         <div className={styles.section}>
-          <h3 className={styles.sectionTitle}>¿Qué servicio deseas?</h3>
+          <h3 className={styles.sectionTitle}>¿Qué servicios deseas?</h3>
+          {selectedServices.length > 0 && (
+            <p style={{ marginBottom: '0.75rem', fontSize: '0.85rem', color: 'var(--primary-600)' }}>
+              {selectedServices.length} servicio{selectedServices.length > 1 ? 's' : ''} seleccionado{selectedServices.length > 1 ? 's' : ''} — {totalDurationMinutes} min — ${totalPrice.toLocaleString()} MXN
+            </p>
+          )}
 
           {/* Category Filters */}
           {!loadingServices && services.length > 0 && (
@@ -431,21 +442,30 @@ export default function BookView({ onSuccess, userId, userRole }: BookViewProps)
             <p>Cargando catálogo...</p>
           ) : (
             <div className={styles.catalogGrid}>
-              {filteredServicesByCategory.map((srv, i) => (
-                <div
-                  key={srv.id}
-                  className={`${styles.catalogCardWrap} ${selectedService?.id === srv.id ? styles.catalogCardSelected : ''}`}
-                  style={{ animationDelay: `${i * 0.06}s` }}
-                  onClick={() => setSelectedService(srv)}
-                >
-                  <ServiceCard service={srv} />
-                  {selectedService?.id === srv.id && (
-                    <div className={styles.catalogCheckmark}>
-                      <Check size={16} />
-                    </div>
-                  )}
-                </div>
-              ))}
+              {filteredServicesByCategory.map((srv, i) => {
+                const isSelected = selectedServices.some((s) => s.id === srv.id);
+                return (
+                  <div
+                    key={srv.id}
+                    className={`${styles.catalogCardWrap} ${isSelected ? styles.catalogCardSelected : ''}`}
+                    style={{ animationDelay: `${i * 0.06}s` }}
+                    onClick={() =>
+                      setSelectedServices((prev) =>
+                        prev.some((s) => s.id === srv.id)
+                          ? prev.filter((s) => s.id !== srv.id)
+                          : [...prev, srv]
+                      )
+                    }
+                  >
+                    <ServiceCard service={srv} isSelected={isSelected} />
+                    {isSelected && (
+                      <div className={styles.catalogCheckmark}>
+                        <Check size={16} />
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           )}
 
@@ -462,7 +482,7 @@ export default function BookView({ onSuccess, userId, userRole }: BookViewProps)
             <Button
               variant="primary"
               onClick={nextStep}
-              disabled={!selectedService}
+              disabled={selectedServices.length === 0}
               icon={<ChevronRight size={18} />}
             >
               Siguiente
@@ -597,7 +617,7 @@ export default function BookView({ onSuccess, userId, userRole }: BookViewProps)
       )}
 
       {/* Step: Confirm */}
-      {step === 'confirm' && selectedService && (
+      {step === 'confirm' && selectedServices.length > 0 && (
         <div className={styles.section}>
           <h3 className={styles.sectionTitle}>Confirma tu reserva</h3>
 
@@ -614,13 +634,25 @@ export default function BookView({ onSuccess, userId, userRole }: BookViewProps)
                 <span className={styles.confirmValue}>{selectedClient.fullName}</span>
               </div>
             )}
-            <div className={styles.confirmRow}>
-              <span className={styles.confirmLabel}>Servicio</span>
-              <span className={styles.confirmValue}>{selectedService.name}</span>
+            {/* Lista de servicios seleccionados */}
+            <div className={styles.confirmRow} style={{ alignItems: 'flex-start' }}>
+              <span className={styles.confirmLabel}>
+                {selectedServices.length > 1 ? 'Servicios' : 'Servicio'}
+              </span>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', textAlign: 'right' }}>
+                {selectedServices.map((s) => (
+                  <span key={s.id} className={styles.confirmValue} style={{ fontSize: '0.9rem' }}>
+                    {s.name}
+                    <span style={{ color: 'var(--neutral-500)', marginLeft: '0.5rem' }}>
+                      ({s.durationMinutes} min — ${s.price.toLocaleString()})
+                    </span>
+                  </span>
+                ))}
+              </div>
             </div>
             <div className={styles.confirmRow}>
-              <span className={styles.confirmLabel}>Duración</span>
-              <span className={styles.confirmValue}>{selectedService.durationMinutes} minutos</span>
+              <span className={styles.confirmLabel}>Duración total</span>
+              <span className={styles.confirmValue}>{totalDurationMinutes} minutos</span>
             </div>
             <div className={styles.confirmRow}>
               <span className={styles.confirmLabel}>Profesional</span>
@@ -635,9 +667,9 @@ export default function BookView({ onSuccess, userId, userRole }: BookViewProps)
               <span className={styles.confirmValue}>{selectedTime} hrs</span>
             </div>
             <div className={styles.confirmRow}>
-              <span className={styles.confirmLabel}>Precio</span>
+              <span className={styles.confirmLabel}>Precio total</span>
               <span className={`${styles.confirmValue} ${styles.confirmPrice}`}>
-                ${selectedService.price.toLocaleString()} MXN
+                ${totalPrice.toLocaleString()} MXN
               </span>
             </div>
             <div className={styles.confirmRow}>

@@ -6,7 +6,7 @@ import Button from '@/components/atoms/Button/Button';
 import Input from '@/components/atoms/Input/Input';
 import styles from './LoginView.module.css';
 import { CONFIG } from '@/lib/config';
-import { signInWithMagicLink } from '@/app/auth/actions';
+import { createClient } from '@/utils/supabase/client';
 
 interface LoginViewProps {
   onLogin?: () => void;
@@ -22,22 +22,27 @@ export default function LoginView({ onLogin, salonId, salonName }: LoginViewProp
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (email) {
-      setLoading(true);
-      setError(null);
-      try {
-        const formData = new FormData();
-        formData.append('email', email);
-        if (salonId) {
-          formData.append('salon_id', salonId);
-        }
-        await signInWithMagicLink(formData);
-        setSent(true);
-      } catch (err: any) {
-        setError(err.message || 'Ocurrió un error al enviar el enlace');
-      } finally {
-        setLoading(false);
-      }
+    if (!email) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const supabase = createClient();
+      const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || window.location.origin;
+      const callbackUrl = salonId
+        ? `${baseUrl}/auth/callback?salon_id=${encodeURIComponent(salonId)}`
+        : `${baseUrl}/auth/callback`;
+
+      const { error: otpError } = await supabase.auth.signInWithOtp({
+        email,
+        options: { emailRedirectTo: callbackUrl },
+      });
+
+      if (otpError) throw new Error(otpError.message);
+      setSent(true);
+    } catch (err: any) {
+      setError(err.message || 'Ocurrió un error al enviar el enlace');
+    } finally {
+      setLoading(false);
     }
   };
 
