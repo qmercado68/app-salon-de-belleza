@@ -1171,9 +1171,15 @@ export const api = {
       throw new Error('Tu usuario no tiene salón asignado. Actualiza tu perfil para reservar citas.');
     }
 
-    const { error } = await supabase.rpc('create_bookable_appointment', {
+    // Resolve primary service id (first of array, or singular fallback)
+    const primaryServiceId =
+      appointment.serviceIds && appointment.serviceIds.length > 0
+        ? appointment.serviceIds[0]
+        : appointment.serviceId;
+
+    const { error, data: rpcData } = await supabase.rpc('create_bookable_appointment', {
       p_client_id: appointment.clientId,
-      p_service_id: appointment.serviceId,
+      p_service_id: primaryServiceId,
       p_stylist_id: appointment.stylistId || null,
       p_appointment_date: appointment.appointmentDate,
       p_status: appointment.status || 'pendiente',
@@ -1183,6 +1189,26 @@ export const api = {
     });
 
     if (error) throw error;
+
+    // Insert additional services into appointment_services junction table
+    const extraServiceIds = (appointment.serviceIds ?? []).slice(1);
+    if (extraServiceIds.length > 0 && rpcData) {
+      // rpcData may be the new appointment id (uuid) returned by the RPC
+      const appointmentId = typeof rpcData === 'string' ? rpcData : (rpcData as any)?.[0]?.id ?? null;
+      if (appointmentId) {
+        const rows = extraServiceIds.map((sid) => ({
+          appointment_id: appointmentId,
+          service_id: sid,
+        }));
+        const { error: junctionError } = await supabase
+          .from('appointment_services')
+          .insert(rows);
+        if (junctionError) {
+          console.error('Error al insertar servicios adicionales:', junctionError);
+          // Non-blocking: the main appointment was already created
+        }
+      }
+    }
   },
 
   async getAvailableTimeSlots(

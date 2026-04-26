@@ -182,6 +182,7 @@ export interface Appointment {
   clientId: string;
   clientName: string;
   serviceId: string;
+  serviceIds?: string[];
   serviceName: string;
   servicePrice?: number;
   serviceTaxTreatment?: TaxTreatment;
