@@ -5,7 +5,10 @@
       "Bash(npx supabase *)",
       "Bash(xargs grep *)",
       "Bash(git add *)",
-      "Bash(git commit -m ' *)"
+      "Bash(git commit -m ' *)",
+      "mcp__engram__mem_save",
+      "Bash(npx tsc *)",
+      "Bash(git *)"
     ]
   }
 }

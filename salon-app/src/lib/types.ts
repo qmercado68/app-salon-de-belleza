@@ -184,7 +184,9 @@ export interface Appointment {
   serviceId: string;
   serviceIds?: string[];
   serviceName: string;
+  serviceNames?: string[];
   servicePrice?: number;
+  durationMinutes?: number;
   serviceTaxTreatment?: TaxTreatment;
   stylistId?: string;
   stylistName?: string;

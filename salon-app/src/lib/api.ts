@@ -1048,7 +1048,9 @@ export const api = {
           clientPhone: d.client_phone ?? '',
           serviceId: d.service_id,
           serviceName: d.service_name ?? '',
+          serviceNames: Array.isArray(d.service_names) ? d.service_names : undefined,
           servicePrice: d.service_price ?? 0,
+          durationMinutes: typeof d.duration_minutes === 'number' ? d.duration_minutes : undefined,
           stylistId: d.stylist_id,
           stylistName: d.stylist_name ?? 'Sin asignar',
           appointmentDate: d.appointment_date,
@@ -1084,7 +1086,9 @@ export const api = {
         clientPhone: d.client_phone ?? '',
         serviceId: d.service_id,
         serviceName: d.service_name ?? '',
+        serviceNames: Array.isArray(d.service_names) ? d.service_names : undefined,
         servicePrice: Number(d.service_price ?? 0),
+        durationMinutes: typeof d.duration_minutes === 'number' ? d.duration_minutes : undefined,
         stylistId: d.stylist_id,
         stylistName: d.stylist_name ?? 'Sin asignar',
         appointmentDate: d.appointment_date,
@@ -1107,7 +1111,7 @@ export const api = {
 
     let query = supabase
       .from('appointments')
-      .select('*, services(name, price), profiles!client_id(full_name, allergies, medical_conditions, medical_form_requested, phone), stylist:profiles!stylist_id(full_name), salons(name)');
+      .select('*, services(name, price, duration_minutes), appointment_services(service:services(name, duration_minutes)), profiles!client_id(full_name, allergies, medical_conditions, medical_form_requested, phone), stylist:profiles!stylist_id(full_name), salons(name)');
 
     if (userId && !options?.skipSalonFilter) {
       const salonId = await api.getSalonId(userId);
@@ -1124,14 +1128,25 @@ export const api = {
       }
       throw error;
     }
-    return (data as any[]).map((d) => ({
+    return (data as any[]).map((d) => {
+      const primaryName = d.services?.name ?? '';
+      const primaryDuration = Number(d.services?.duration_minutes ?? 30);
+      const extras = Array.isArray(d.appointment_services) ? d.appointment_services : [];
+      const extraNames = extras.map((e: any) => e?.service?.name).filter(Boolean) as string[];
+      const extraDuration = extras.reduce(
+        (sum: number, e: any) => sum + Number(e?.service?.duration_minutes ?? 0),
+        0
+      );
+      return {
       id: d.id,
       clientId: d.client_id,
       clientName: d.profiles?.full_name ?? '',
       clientPhone: d.profiles?.phone ?? '',
       serviceId: d.service_id,
-      serviceName: d.services?.name ?? '',
+      serviceName: primaryName,
+      serviceNames: [primaryName, ...extraNames].filter(Boolean),
       servicePrice: d.services?.price ?? 0,
+      durationMinutes: primaryDuration + extraDuration,
       stylistId: d.stylist_id,
       stylistName: d.stylist?.full_name ?? 'Sin asignar',
       appointmentDate: d.appointment_date,
@@ -1149,7 +1164,8 @@ export const api = {
       allergies: d.profiles?.allergies ?? '',
       medicalConditions: d.profiles?.medical_conditions ?? '',
       medicalFormRequested: d.profiles?.medical_form_requested ?? false,
-    })) as Appointment[];
+      };
+    }) as Appointment[];
   },
 
   async createAppointment(appointment: Partial<Appointment>, userId?: string): Promise<void> {

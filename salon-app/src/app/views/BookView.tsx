@@ -86,39 +86,45 @@ export default function BookView({ onSuccess, userId, userRole }: BookViewProps)
   // 1. Load salons for superadmin
   useEffect(() => {
     if (isSuperadmin) {
+      let cancelled = false;
       const fetch = async () => {
         try {
           setLoadingSalons(true);
           const data = await api.getSalons();
-          setSalons(data);
+          if (!cancelled) setSalons(data);
         } catch (err) {
-          console.error('Error al cargar salones:', err);
+          if (!cancelled) console.error('Error al cargar salones:', err);
         } finally {
-          setLoadingSalons(false);
+          if (!cancelled) setLoadingSalons(false);
         }
       };
       fetch();
+      return () => { cancelled = true; };
     }
   }, [isSuperadmin]);
 
   // 2. Load clients when entering client step
   useEffect(() => {
     if (step === 'client' && isStaff) {
+      let cancelled = false;
       const fetch = async () => {
         try {
           setLoadingClients(true);
           let data = await api.getBookableClients(userId, effectiveSalonId);
+          if (cancelled) return;
           if (isSuperadmin && effectiveSalonId && data.length === 0) {
             data = await api.getBookableClients(userId);
+            if (cancelled) return;
           }
           setClients(data);
         } catch (err) {
-          console.error('Error al cargar clientes:', err);
+          if (!cancelled) console.error('Error al cargar clientes:', err);
         } finally {
-          setLoadingClients(false);
+          if (!cancelled) setLoadingClients(false);
         }
       };
       fetch();
+      return () => { cancelled = true; };
     }
   }, [step, isStaff, isSuperadmin, effectiveSalonId]);
 
@@ -134,18 +140,20 @@ export default function BookView({ onSuccess, userId, userRole }: BookViewProps)
   useEffect(() => {
     if (step === 'service') {
       setActiveCategory('Todos');
+      let cancelled = false;
       const fetch = async () => {
         try {
           setLoadingServices(true);
           const data = await api.getBookableServices(userId, effectiveSalonId);
-          setServices(data.filter((s) => s.isActive !== false));
+          if (!cancelled) setServices(data.filter((s) => s.isActive !== false));
         } catch (err) {
-          console.error('Error al cargar servicios:', err);
+          if (!cancelled) console.error('Error al cargar servicios:', err);
         } finally {
-          setLoadingServices(false);
+          if (!cancelled) setLoadingServices(false);
         }
       };
       fetch();
+      return () => { cancelled = true; };
     }
   }, [step, userId, effectiveSalonId]);
 
@@ -159,21 +167,25 @@ export default function BookView({ onSuccess, userId, userRole }: BookViewProps)
   // 4. Load stylists when entering stylist step
   useEffect(() => {
     if (step === 'stylist') {
+      let cancelled = false;
       const fetch = async () => {
         try {
           setLoadingStylists(true);
           let data = await api.getStylists(userId, effectiveSalonId);
+          if (cancelled) return;
           if (isSuperadmin && effectiveSalonId && data.length === 0) {
             data = await api.getStylists(userId);
+            if (cancelled) return;
           }
           setStylists(data);
         } catch (err) {
-          console.error('Error al cargar estilistas:', err);
+          if (!cancelled) console.error('Error al cargar estilistas:', err);
         } finally {
-          setLoadingStylists(false);
+          if (!cancelled) setLoadingStylists(false);
         }
       };
       fetch();
+      return () => { cancelled = true; };
     }
   }, [step, userId, effectiveSalonId, isSuperadmin]);
 
@@ -191,6 +203,7 @@ export default function BookView({ onSuccess, userId, userRole }: BookViewProps)
   // 5. Load time slots
   useEffect(() => {
     if (step === 'datetime' && selectedStylist && selectedServices.length > 0) {
+      let cancelled = false;
       const fetch = async () => {
         try {
           setLoadingTimeSlots(true);
@@ -206,14 +219,15 @@ export default function BookView({ onSuccess, userId, userRole }: BookViewProps)
             selectedStylist.breakEndTime,
             selectedStylist.isAvailable ?? true
           );
-          setTimeSlots(slots);
+          if (!cancelled) setTimeSlots(slots);
         } catch (err) {
-          console.error('Error fetching time slots:', err);
+          if (!cancelled) console.error('Error fetching time slots:', err);
         } finally {
-          setLoadingTimeSlots(false);
+          if (!cancelled) setLoadingTimeSlots(false);
         }
       };
       fetch();
+      return () => { cancelled = true; };
     }
   }, [step, selectedDate, selectedStylist, selectedServices, totalDurationMinutes]);
 

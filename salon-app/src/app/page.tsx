@@ -103,38 +103,53 @@ export default function HomePage() {
 
     checkUser();
 
-    const { data: { subscription } } = supabase?.auth ? supabase.auth.onAuthStateChange(async (event: any, session: any) => {
-      // No mostrar loading en refresco de token o al volver a la pestaña
+    if (!supabase?.auth) return;
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event: any, session: any) => {
       if (event === 'TOKEN_REFRESHED' || event === 'INITIAL_SESSION') return;
 
-      const authUser = session?.user ?? null;
-      setUser(authUser);
-
-      if (authUser) {
-        try {
-          const userProfile = await api.getProfile(authUser.id);
-          setProfile(userProfile);
-        } catch (error) {
-          console.warn("Profile fetch failed on state change:", error);
-          // Fallback: obtener rol vía RPC
-          try {
-            const { data: role } = await supabase.rpc('get_my_role');
-            setProfile({
-              id: authUser.id,
-              fullName: authUser.email?.split('@')[0] || 'Usuario',
-              email: authUser.email || '',
-              role: role || 'client',
-            } as Profile);
-          } catch (rpcErr) {
-            console.error("RPC fallback también falló:", rpcErr);
-          }
-        }
-        setCurrentView('dashboard');
-      } else {
+      if (event === 'SIGNED_OUT') {
+        setUser(null);
         setProfile(null);
         setCurrentView('login');
+        return;
       }
-    }) : { data: { subscription: { unsubscribe: () => {} } } };
+
+      if (event === 'SIGNED_IN') {
+        const authUser = session?.user ?? null;
+        let isNewLogin = false;
+        setUser((prev: any) => {
+          if (prev?.id === authUser?.id) return prev;
+          isNewLogin = !prev && !!authUser;
+          return authUser;
+        });
+
+        if (authUser) {
+          try {
+            const userProfile = await api.getProfile(authUser.id);
+            setProfile(userProfile);
+          } catch (error) {
+            console.warn("Profile fetch failed on state change:", error);
+            try {
+              const { data: role } = await supabase.rpc('get_my_role');
+              setProfile({
+                id: authUser.id,
+                fullName: authUser.email?.split('@')[0] || 'Usuario',
+                email: authUser.email || '',
+                role: role || 'client',
+              } as Profile);
+            } catch (rpcErr) {
+              console.error("RPC fallback también falló:", rpcErr);
+            }
+          }
+          if (isNewLogin) setCurrentView('dashboard');
+        }
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
   }, []);
 
   if (loading) {

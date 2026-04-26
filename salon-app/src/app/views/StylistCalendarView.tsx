@@ -48,6 +48,25 @@ type CalendarViewMode = 'daily' | 'weekly';
 const HOUR_START = 7;
 const HOUR_END = 21;
 const HOURS = Array.from({ length: HOUR_END - HOUR_START }, (_, i) => HOUR_START + i);
+const SLOT_HEIGHT_PX = 80;
+const MINUTES_PER_SLOT = 60;
+const MIN_EVENT_HEIGHT_PX = 22;
+
+const getEventDurationMinutes = (evt: Appointment): number => {
+  const dur = Number(evt.durationMinutes);
+  return Number.isFinite(dur) && dur > 0 ? dur : 30;
+};
+
+const getEventEndDate = (evt: Appointment): Date => {
+  const start = new Date(evt.appointmentDate);
+  return new Date(start.getTime() + getEventDurationMinutes(evt) * 60_000);
+};
+
+const formatTimeRange = (evt: Appointment): string => {
+  const start = new Date(evt.appointmentDate);
+  const end = getEventEndDate(evt);
+  return `${format(start, 'HH:mm')} - ${format(end, 'HH:mm')}`;
+};
 
 const STATUS_FILTERS: { label: string; value: AppointmentStatus; color: string }[] = [
   { label: 'Pendientes', value: 'pendiente', color: '#f59e0b' },
@@ -325,16 +344,32 @@ export default function StylistCalendarView({ userId, role }: CalendarViewProps)
   };
 
   // ── Render event card (reusable for weekly & daily) ──
-  const renderEventCard = (evt: Appointment) => (
+  const renderEventCard = (evt: Appointment) => {
+    const start = new Date(evt.appointmentDate);
+    const durationMinutes = getEventDurationMinutes(evt);
+    const minutesIntoSlot = start.getMinutes();
+    const topPx = (minutesIntoSlot / MINUTES_PER_SLOT) * SLOT_HEIGHT_PX;
+    const heightPx = Math.max(
+      MIN_EVENT_HEIGHT_PX,
+      (durationMinutes / MINUTES_PER_SLOT) * SLOT_HEIGHT_PX - 4
+    );
+    return (
     <div
       key={evt.id}
       className={`${styles.eventCard} ${getEventClass(evt.status)}`}
       onClick={() => setSelectedEvent(evt)}
+      style={{
+        position: 'absolute',
+        top: topPx + 2,
+        left: 2,
+        right: 2,
+        height: heightPx,
+      }}
     >
       <div className={styles.eventTitle}>{evt.serviceName}</div>
       <div className={styles.eventTime}>
         <Clock size={10} />
-        {format(new Date(evt.appointmentDate), 'HH:mm')}
+        {formatTimeRange(evt)}
       </div>
       <div className={styles.eventClient}>
         <User size={10} />
@@ -366,7 +401,8 @@ export default function StylistCalendarView({ userId, role }: CalendarViewProps)
         </div>
       )}
     </div>
-  );
+    );
+  };
 
   if (loading) {
     return (
@@ -709,11 +745,21 @@ export default function StylistCalendarView({ userId, role }: CalendarViewProps)
               <span>
                 {format(
                   new Date(selectedEvent.appointmentDate),
-                  "EEEE d 'de' MMMM, HH:mm 'hrs'",
+                  "EEEE d 'de' MMMM",
                   { locale: es }
                 )}
+                {`, ${formatTimeRange(selectedEvent)} hrs`}
+                {` (${getEventDurationMinutes(selectedEvent)} min)`}
               </span>
             </div>
+
+            {/* Services list (handy for multi-service appointments) */}
+            {selectedEvent.serviceNames && selectedEvent.serviceNames.length > 1 && (
+              <div className={styles.eventPopupRow}>
+                <Scissors size={16} className={styles.eventPopupIcon} />
+                <span>{selectedEvent.serviceNames.join(', ')}</span>
+              </div>
+            )}
 
             {/* Client */}
             <div className={styles.eventPopupRow}>
