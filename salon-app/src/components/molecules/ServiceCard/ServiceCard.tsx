@@ -1,5 +1,5 @@
 import React from 'react';
-import { Clock, DollarSign } from 'lucide-react';
+import { Clock, DollarSign, Check } from 'lucide-react';
 import styles from './ServiceCard.module.css';
 import Button from '@/components/atoms/Button/Button';
 import { Service } from '@/lib/types';
@@ -7,6 +7,7 @@ import { Service } from '@/lib/types';
 interface ServiceCardProps {
   service: Service;
   onBook?: (service: Service) => void;
+  isSelected?: boolean;
 }
 
 const categoryIcons: Record<string, string> = {
@@ -17,12 +18,17 @@ const categoryIcons: Record<string, string> = {
   'Maquillaje': '💄',
 };
 
-export default function ServiceCard({ service, onBook }: ServiceCardProps) {
+export default function ServiceCard({ service, onBook, isSelected = false }: ServiceCardProps) {
   return (
-    <div className={styles.card}>
+    <div className={`${styles.card} ${isSelected ? styles.cardSelected : ''}`}>
       <div className={styles.header}>
         <span className={styles.emoji}>{categoryIcons[service.category] || '✂️'}</span>
         <span className={styles.category}>{service.category}</span>
+        {isSelected && (
+          <span className={styles.selectedBadge}>
+            <Check size={12} />
+          </span>
+        )}
       </div>
       <h3 className={styles.name}>{service.name}</h3>
       <p className={styles.description}>{service.description}</p>

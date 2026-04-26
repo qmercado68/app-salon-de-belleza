@@ -76,3 +76,21 @@
 .bookBtn {
   margin-top: var(--space-2);
 }
+
+.cardSelected {
+  border-color: var(--accent-500);
+  box-shadow: 0 0 0 2px var(--accent-200);
+}
+
+.selectedBadge {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--accent-500);
+  color: #fff;
+  flex-shrink: 0;
+}
